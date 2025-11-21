@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useCallback } from 'react';
-import { Camera, X, RefreshCw } from 'lucide-react'; // X für Schließen, Refresh für Kamera drehen
+import { Camera, X, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Webcam from 'react-webcam';
 import { saveImageToServer } from '../actions/saveImage';
@@ -17,7 +17,6 @@ export default function ArtikelForm() {
     beschreibung: ''
   });
 
-  // State für Kamera-Overlay
   const [showCamera, setShowCamera] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const webcamRef = useRef<Webcam>(null);
@@ -53,6 +52,8 @@ export default function ArtikelForm() {
         
         const result = await saveImageToServer(imageSrc);
         console.log("Bild gespeichert unter:", result);
+
+        
         // HIER KOMMT DIE KI AGENT LOGIK HIN  
         await analyzeImageWithAI(imageSrc);
         

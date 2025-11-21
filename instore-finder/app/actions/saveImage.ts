@@ -22,7 +22,7 @@ export async function saveImageToServer(base64Data: string) {
     }
 
     // 3. Dateinamen generieren
-    const filename = `scan_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+    const filename = `scan_${Math.random().toString(36).slice(2)}.jpeg`;
     const filepath = path.join(uploadDir, filename);
 
     // 4. Datei schreiben
