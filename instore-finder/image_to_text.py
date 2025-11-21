@@ -1,5 +1,6 @@
 # Python example to retrieve available models
 #usage example: python.exe c:/NavarroProgs/AI-Thon/ObiSearch/image_to_text.py "C:\NavarroProgs\AI-Thon\ObiSearch\8200735.jpeg"
+#Output example:  Das Bild zeigt einen geraden, gleichmäßigen Tannenbaum mit dunkler, dicht beieinander stehender Nadeln. Der Baum steht frei und hat eine symmetrische, kegelförmige Form. Das Bild hat einen einfachen, weißen Hintergrund, was den Kontrast zum dunklen Grün des Baumes verstärkt. Der Baum wirkt frisch und gilt als dekorativer Baumsort zur Weihnachtszeit. 
 
 import requests
 import mimetypes
@@ -34,7 +35,7 @@ def main(image_path: str):
 
     messages = [
         {"role": "system",
-        "content": "You are an assitant that converts image to text. Return a text description of the image."},
+        "content": "You are an assitant that converts image to text. Return a text description in German language of the image."},
         {"role": "user",
         "content": [
             {"type": "text", "text": "What is a textual description for this image."},
