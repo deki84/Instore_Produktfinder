@@ -1,6 +1,5 @@
 import Image from "next/image";
-import { ArtikelForm } from "./components/startPage";
-import { Children } from "react";
+import  ArtikelForm  from "./components/startPage";
 
 export default function Home() {
   return (
