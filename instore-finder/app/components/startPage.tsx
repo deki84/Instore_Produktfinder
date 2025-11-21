@@ -3,6 +3,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { Camera, X, RefreshCw } from 'lucide-react'; // X für Schließen, Refresh für Kamera drehen
 import { useRouter } from 'next/navigation';
 import Webcam from 'react-webcam';
+import { saveImageToServer } from '../actions/saveImage';
 
 
 const WebcamComponent = Webcam as any;
@@ -48,10 +49,11 @@ export default function ArtikelForm() {
       const imageSrc = webcamRef.current.getScreenshot();
       
       if (imageSrc) {
-        // Kamera schließen und Lade-Status anzeigen (optional)
         setIsAnalyzing(true);
         
-        // HIER KOMMT DIE KI AGENT LOGIK HIN
+        const result = await saveImageToServer(imageSrc);
+        console.log("Bild gespeichert unter:", result);
+        // HIER KOMMT DIE KI AGENT LOGIK HIN  
         await analyzeImageWithAI(imageSrc);
         
         setShowCamera(false);
