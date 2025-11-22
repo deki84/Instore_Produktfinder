@@ -1,0 +1,43 @@
+[
+    {
+        "knoten": "A",
+        "position": { "x": 599, "y": 450 }
+    },
+    {
+        "knoten": "B",
+        "position": { "x": 600, "y": 323 }
+    },
+    {
+        "knoten": "C",
+        "position": { "x": 710, "y": 310 }
+    },
+    {
+        "knoten": "D",
+        "position": { "x": 817, "y": 307 }
+    },
+    {
+        "knoten": "E",
+        "position": { "x": 627, "y": 311 }
+    },
+    {
+        "knoten": "F",
+        "position": { "x": 515, "y": 311 }
+    },
+    {
+        "knoten": "G",
+        "position": { "x": 391, "y": 317 }
+    },
+    {
+        "knoten": "H",
+        "position": { "x": 263, "y": 319 }
+    },
+    {
+        "knoten": "I",
+        "position": { "x": 259, "y": 97 }
+    },
+    {
+        "knoten": "J",
+        "position": { "x": 122, "y": 282 }
+    }
+
+]

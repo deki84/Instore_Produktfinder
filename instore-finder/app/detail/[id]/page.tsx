@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Heart, ChevronDown, ChevronUp } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface Artikel {
   id: string;
@@ -33,6 +34,12 @@ const artikelListe: Artikel[] = [
 
 export default function ProduktDetail() {
   const [isAccordionOpen, setIsAccordionOpen] = useState(true);
+  const router = useRouter();
+
+    const handleSearch = () => {
+    const params = new URLSearchParams();
+    router.push(`/MarktNavi/[id]?${params.toString()}`);
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white font-sans">
@@ -112,7 +119,9 @@ export default function ProduktDetail() {
 
       {/* Bottom Floating/Static Button */}
       <div className="flex justify-center">
-        <button className="bg-gray-800 text-white px-8 py-4 rounded-lg text-sm font-medium hover:bg-gray-700 transition shadow-lg">
+        <button 
+        onClick={handleSearch}
+        className="bg-gray-800 text-white px-8 py-4 rounded-lg text-sm font-medium hover:bg-gray-700 transition shadow-lg">
           Zeig mir wo ich hin muss
         </button>
       </div>

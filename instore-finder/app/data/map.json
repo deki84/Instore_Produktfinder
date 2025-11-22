@@ -1,0 +1,197 @@
+[
+  {
+    "aisle": "1",
+    "category": "Sanitär und Keramik",
+    "coordinates": { "x": 1220, "y": 650 }
+  },
+  {
+    "aisle": "2",
+    "category": "Sanitär und Keramik",
+    "coordinates": { "x": 1220, "y": 650 }
+  },
+  {
+    "aisle": "3",
+    "category": "Baddeko",
+    "coordinates": { "x": 1300, "y": 650 }
+  },
+  {
+    "aisle": "4",
+    "category": "Baddeko",
+    "coordinates": { "x": 1300, "y": 650 }
+  },
+  {
+    "aisle": "5",
+    "category": "Baddeko",
+    "coordinates": { "x": 1300, "y": 650 }
+  },
+  {
+    "aisle": "6",
+    "category": "Sanitär Installation",
+    "coordinates": { "x": 1380, "y": 650 }
+  },
+  {
+    "aisle": "7",
+    "category": "Sanitär Installation",
+    "coordinates": { "x": 1380, "y": 650 }
+  },
+  {
+    "aisle": "8",
+    "category": "Heizung",
+    "coordinates": { "x": 1460, "y": 650 }
+  },
+  {
+    "aisle": "9",
+    "category": "Heizung",
+    "coordinates": { "x": 1460, "y": 650 }
+  },
+  {
+    "aisle": "10",
+    "category": "Isolierung / Dämmung",
+    "coordinates": { "x": 1540, "y": 650 }
+  },
+  {
+    "aisle": "11",
+    "category": "Isolierung / Dämmung",
+    "coordinates": { "x": 1540, "y": 650 }
+  },
+  {
+    "aisle": "13",
+    "category": "Mörtel / Putz / Zement",
+    "coordinates": { "x": 1620, "y": 650 }
+  },
+  {
+    "aisle": "14",
+    "category": "Bauholz",
+    "coordinates": { "x": 1850, "y": 400 }
+  },
+  {
+    "aisle": "15",
+    "category": "Arbeitsplatten / Holz",
+    "coordinates": { "x": 1750, "y": 400 }
+  },
+  {
+    "aisle": "16",
+    "category": "Möbelbau / Holz",
+    "coordinates": { "x": 1700, "y": 400 }
+  },
+  {
+    "aisle": "17",
+    "category": "Möbelbau / Holz",
+    "coordinates": { "x": 1650, "y": 400 }
+  },
+  {
+    "aisle": "18",
+    "category": "Bauelemente",
+    "coordinates": { "x": 1650, "y": 400 }
+  },
+  {
+    "aisle": "19",
+    "category": "Bauelemente",
+    "coordinates": { "x": 1650, "y": 400 }
+  },
+  {
+    "aisle": "20",
+    "category": "Bauelemente",
+    "coordinates": { "x": 1500, "y": 400 }
+  },
+  {
+    "aisle": "21",
+    "category": "Parkett / Laminat",
+    "coordinates": { "x": 1500, "y": 400 }
+  },
+  {
+    "aisle": "23",
+    "category": "Parkett / Laminat",
+    "coordinates": { "x": 1350, "y": 400 }
+  },
+  {
+    "aisle": "24",
+    "category": "Fliesen",
+    "coordinates": { "x": 1350, "y": 400 }
+  },
+  {
+    "aisle": "25",
+    "category": "Fliesen",
+    "coordinates": { "x": 1200, "y": 400 }
+  },
+  {
+    "aisle": "26",
+    "category": "Fliesenzubehör",
+    "coordinates": { "x": 1200, "y": 400 }
+  },
+  {
+    "aisle": "27",
+    "category": "Maschinen",
+    "coordinates": { "x": 1200, "y": 400 }
+  },
+  {
+    "aisle": "28",
+    "category": "Maschinen",
+    "coordinates": { "x": 1100, "y": 400 }
+  },
+  {
+    "aisle": "29",
+    "category": "Maschinen",
+    "coordinates": { "x": 1100, "y": 400 }
+  },
+  {
+    "aisle": "30",
+    "category": "Auto",
+    "coordinates": { "x": 1100, "y": 400 }
+  },
+  {
+    "aisle": "31",
+    "category": "Werkzeuge",
+    "coordinates": { "x": 1050, "y": 400 }
+  },
+  {
+    "aisle": "32",
+    "category": "Eisenwaren",
+    "coordinates": { "x": 980, "y": 400 }
+  },
+  {
+    "aisle": "33",
+    "category": "Eisenwaren",
+    "coordinates": { "x": 980, "y": 400 }
+  },
+  {
+    "aisle": "34",
+    "category": "Eisenwaren",
+    "coordinates": { "x": 980, "y": 400 }
+  },
+  {
+    "aisle": "35",
+    "category": "Ordnung",
+    "coordinates": { "x": 900, "y": 400 }
+  },
+  {
+    "aisle": "36",
+    "category": "Ordnung",
+    "coordinates": { "x": 900, "y": 400 }
+  },
+  {
+    "aisle": "37",
+    "category": "Haushalt",
+    "coordinates": { "x": 850, "y": 400 }
+  },
+  {
+    "aisle": "38",
+    "category": "Farben und Lacke",
+    "coordinates": { "x": 750, "y": 400 }
+  },
+  {
+    "aisle": "39",
+    "category": "Farben und Lacke",
+    "coordinates": { "x": 750, "y": 400 }
+  },
+  {
+    "aisle": "40",
+    "category": "Farben und Lacke",
+    "coordinates": { "x": 750, "y": 400 }
+  },
+  {
+    "aisle": "41",
+    "category": "Farben und Lacke",
+    "coordinates": { "x": 750, "y": 400 }
+  }
+]
