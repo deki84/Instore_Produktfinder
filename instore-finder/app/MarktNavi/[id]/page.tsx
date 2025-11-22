@@ -106,7 +106,6 @@ const WAYPOINT_GRAPH: GraphNode[] = [
   { id: 'wood_entry', x: 80, y: 59, neighbors: ['wood_back'] },
 ];
 
-// --- HELPER FUNCTIONS ---
 const getDistance = (a: Point, b: Point) => {
   return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
 };
@@ -198,7 +197,7 @@ export default function MarktNaviPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Helper für normalisierte Koordinaten (%)
+  //normalisierte Koordinaten (%)
   const getNormalizedPoint = (coords: {x: number, y: number}) => ({
     x: (coords.x / MAP_WIDTH) * 100,
     y: (coords.y / MAP_HEIGHT) * 100
@@ -343,7 +342,7 @@ export default function MarktNaviPage() {
           }}
           className="relative w-full h-full max-w-[1920px] max-h-[1080px] origin-center will-change-transform" 
         >
-          <Image src={mapImage} alt="Markt Plan" fill quality={100} priority className="object-contain select-none pointer-events-none" draggable={false} />
+          <Image src={mapImage} alt="Markt Plan" fill quality={100} priority className="object-contain select-none pointer-events-none" />
 
           {/* Route SVG Layer */}
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -375,9 +374,8 @@ export default function MarktNaviPage() {
             )}
           </svg>
 
-          {/* --- HIER SIND DIE GRÜNEN PUNKTE --- */}
-          {/* Loop über PRODUCT_DATA mit Umrechnung der Koordinaten */}
-          {PRODUCT_DATA.map((product, index) => (
+          {/* --- GRÜNEN PUNKTE UM NICHT DURCHZUDREHEN--- */}
+          {/* {PRODUCT_DATA.map((product, index) => (
             <div 
               key={index}
               className="absolute z-30 w-3 h-3 bg-green-500 rounded-full border border-white shadow-sm pointer-events-none hover:bg-green-400 transition-colors"
@@ -391,14 +389,14 @@ export default function MarktNaviPage() {
             />
           ))}
 
-          {/* Debug Nodes (Rot) - optional */}
-          {WAYPOINT_GRAPH.map((node) => (
+          {/* Debug Nodes (Rot) -.- */
+          /* {WAYPOINT_GRAPH.map((node) => (
             <div 
               key={node.id} 
               className="absolute z-40 w-2 h-2 bg-red-600 rounded-full border border-white shadow-sm pointer-events-none opacity-50"
               style={{ left: `${node.x}%`, top: `${node.y}%`, transform: 'translate(-50%, -50%)' }}
             />
-          ))}
+          ))} */ }
 
           {/* Pins */}
           {userLocation && (
@@ -432,12 +430,12 @@ export default function MarktNaviPage() {
             <div className="absolute top-0 left-0 right-0 p-4 z-10 pointer-events-none">
                 <div className="max-w-2xl mx-auto flex gap-3 pointer-events-auto">
                     <button onClick={() => setSidebarOpen(true)} className="p-3 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-lg rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-white transition-all"><Menu size={24} /></button>
-                    <div className="flex-1 relative group">
+                    {/* <div className="flex-1 relative group">
                         <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Search size={20} className="text-zinc-400" /></div>
                         <input type="text" placeholder="Gang oder Produkt suchen..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full py-3 pl-10 pr-4 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-lg rounded-full border-none outline-none focus:ring-2 focus:ring-orange-500 text-zinc-800 dark:text-zinc-100 transition-all" />
-                    </div>
+                    </div> */}
                 </div>
-                <div className="max-w-2xl mx-auto mt-2 flex justify-end pointer-events-auto">
+                <div className="max-w-2xl mx-auto mt-2 flex justify-end -mt-10 pointer-events-auto">
                     <button onClick={() => setIsSelectingLocation(true)} className="flex items-center gap-2 bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full text-xs hover:bg-black/80 transition-colors">
                         <Target size={12} /> {userLocation ? "Standort ändern" : "Standort: Eingang"}
                     </button>

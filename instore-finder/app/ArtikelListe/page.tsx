@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useRef, useCallback } from 'react';
-import { Camera, X, RefreshCw } from 'lucide-react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Camera, X, RefreshCw, Sparkles, ScanLine } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Webcam from 'react-webcam';
 import { saveImageToServer } from '../actions/saveImage';
@@ -19,7 +19,11 @@ export default function ArtikelForm() {
 
   const [showCamera, setShowCamera] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const webcamRef = useRef<Webcam>(null);
+  
+  // Native Video Refs statt react-webcam
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   
   // State für Kamera-Wechsel (Front/Back)
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
@@ -35,145 +39,250 @@ export default function ArtikelForm() {
     if (formData.artikelnummer) params.set('id', formData.artikelnummer);
     if (formData.title) params.set('titel', formData.title);
     if (formData.beschreibung) params.set('desc', formData.beschreibung);
-    router.push(`/detail/[id]?${params.toString()}`);
+    router.push(`/detail/123?${params.toString()}`);
   };
 
-  // KAMERA LOGIK  
+  // KAMERA LOGIK (Native HTML5)
+  const startCamera = useCallback(async () => {
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facingMode }
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Kamera Fehler:", err);
+      alert("Kamera konnte nicht gestartet werden.");
+      setShowCamera(false);
+    }
+  }, [facingMode]);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setShowCamera(false);
+  }, []);
+
   const toggleCamera = () => {
     setFacingMode(prev => prev === "user" ? "environment" : "user");
   };
 
-  const capture = useCallback(async () => {
-    if (webcamRef.current) {
-      const imageSrc = webcamRef.current.getScreenshot();
-      
-      if (imageSrc) {
-        setIsAnalyzing(true);
-        
-        const result = await saveImageToServer(imageSrc);
-        console.log("Bild gespeichert unter:", result);
-
-        
-        // HIER KOMMT DIE KI AGENT LOGIK HIN  
-        await analyzeImageWithAI(imageSrc);
-        
-        setShowCamera(false);
-        setIsAnalyzing(false);
+  // Effekt zum Starten/Stoppen der Kamera
+  useEffect(() => {
+    if (showCamera) {
+      startCamera();
+    } else {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     }
-  }, [webcamRef]);
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [showCamera, facingMode, startCamera]);
+
+  const capture = useCallback(async () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      // Canvas auf Video-Größe setzen
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageSrc = canvas.toDataURL('image/jpeg');
+        
+        if (imageSrc) {
+          stopCamera(); // Kamera stoppen
+          setIsAnalyzing(true);
+          
+          await saveImageToServer(imageSrc);
+          console.log("Bild gespeichert.");
+          
+          // HIER KOMMT DIE KI AGENT LOGIK HIN  
+          await analyzeImageWithAI(imageSrc);
+          
+          setIsAnalyzing(false);
+        }
+      }
+    }
+  }, [stopCamera]);
 
   // Dummy-Funktion für den KI-Agenten
   const analyzeImageWithAI = async (base64Image: string) => {
     console.log("Sende Bild an KI...", base64Image.slice(0, 50) + "...");
     
-    // SIMULATION: Wir tun so, als hätte die KI etwas erkannt
-    // In der Realität: fetch('/api/analyze', { body: ... })
-    setTimeout(() => {
-      setFormData(prev => ({
-        ...prev,
-        artikelnummer: 'z.b 100058',
-        title: 'Artikel Bezeichnungs',
-        beschreibung: 'Ich brauche...für...'
-      }));
-    }, 1000);
+    // SIMULATION
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        setFormData(prev => ({
+          ...prev,
+          artikelnummer: '47110815',
+          title: 'Bosch Akku-Schrauber IXO',
+          beschreibung: 'Kompakter Akkuschrauber, 3.6V, inkl. Bit-Set. Ideal für Möbelaufbau.'
+        }));
+        resolve();
+      }, 1500);
+    });
   };
 
 
   // BILD RENDERN
   return (
-    <div className="max-w-md mx-auto p-4 bg-white min-h-screen flex flex-col relative">
-      {showCamera && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between">
-          {/* Header im Overlay */}
-          <div className="flex justify-between items-center p-4 text-white bg-black/50 absolute top-0 w-full z-10">
-            <button onClick={toggleCamera} className="p-2 rounded-full bg-gray-800/50">
-              <RefreshCw size={24} />
-            </button>
-            <span className="font-bold">Artikel Scannen</span>
-            <button onClick={() => setShowCamera(false)} className="p-2 rounded-full bg-red-600/80">
-              <X size={24} />
-            </button>
-          </div>
-
-          {/* Webcam Feed */}
-          <div className="flex-grow flex items-center justify-center bg-black">
-             <WebcamComponent
-                audio={false}
-                ref={webcamRef}
-                screenshotFormat="image/jpeg"
-                videoConstraints={{
-                  facingMode: facingMode
-                }}
-                className="w-full h-full object-cover" 
-                // object-cover sorgt dafür, dass es den Screen füllt (wie am Handy gewohnt)
-             />
-          </div>
-
-          {/* Auslöser Button */}
-          <div className="p-8 flex justify-center bg-black/20 absolute bottom-0 w-full">
-            <button 
-              onClick={capture}
-              className="w-20 h-20 rounded-full border-4 border-white bg-red-500 hover:bg-red-600 transition-colors shadow-lg"
-            />
-          </div>
-        </div>
-      )}
-
+    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-800 pb-10">
       
-      {/* Loading State Overlay wenn KI rechnet */}
-      {isAnalyzing && (
-        <div className="fixed inset-0 z-40 bg-white/80 flex items-center justify-center">
-          <div className="text-xl font-bold animate-pulse">KI analysiert Bild...</div>
+      {/* --- HEADER (OBI STYLE) --- */}
+      <div className="bg-orange-500 pt-12 pb-8 px-6 shadow-lg rounded-b-[2.5rem]">
+        <div className="max-w-md mx-auto">
+            <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
+              OBI <span className="font-normal text-orange-100">Produkt-Finder</span>
+            </h1>
+            <p className="text-orange-50 font-medium flex items-center gap-2">
+              <Sparkles size={16} />
+              KI-gestützte Artikelsuche
+            </p>
         </div>
-      )}
-
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">Artikelsuche</h1>
-
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Artikelnummer</label>
-        <input
-          type="text"
-          name="artikelnummer"
-          placeholder="z.B. 100458"
-          className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400"
-          value={formData.artikelnummer}
-          onChange={handleChange}
-        />
       </div>
 
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Artikelbezeichnung</label>
-        <input
-          type="text"
-          name="title" 
-          className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400"
-          value={formData.title}
-          onChange={handleChange}
-        />
-      </div>
+      <div className="max-w-md mx-auto px-4 -mt-6">
+        
+        {/* --- CAMERA OVERLAY --- */}
+        {showCamera && (
+          <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between animate-in fade-in duration-300">
+            {/* Header im Overlay */}
+            <div className="flex justify-between items-center p-6 text-white bg-gradient-to-b from-black/70 to-transparent absolute top-0 w-full z-10">
+              <button onClick={toggleCamera} className="p-3 rounded-full bg-white/10 backdrop-blur-md hover:bg-white/20 transition-all">
+                <RefreshCw size={20} />
+              </button>
+              <span className="font-bold text-lg tracking-wide">Scanner aktiv</span>
+              <button onClick={stopCamera} className="p-3 rounded-full bg-white/10 backdrop-blur-md hover:bg-red-500/80 transition-all">
+                <X size={20} />
+              </button>
+            </div>
 
-      <div className="mb-8">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
-        <textarea
-          name="beschreibung"
-          rows={4}
-          className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 resize-none"
-          value={formData.beschreibung}
-          onChange={handleChange}
-        />
-      </div>
+            {/* Webcam Feed (Native Video) */}
+            <div className="flex-grow flex items-center justify-center bg-black relative overflow-hidden">
+               <video 
+                 ref={videoRef}
+                 autoPlay 
+                 playsInline 
+                 muted
+                 className="w-full h-full object-cover" 
+               />
+               {/* Hidden Canvas for Capture */}
+               <canvas ref={canvasRef} className="hidden" />
+               
+               {/* Scan Frame Overlay Visual */}
+               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="w-64 h-64 border-2 border-white/50 rounded-3xl relative">
+                    <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-orange-500 -mt-1 -ml-1 rounded-tl-lg"></div>
+                    <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-orange-500 -mt-1 -mr-1 rounded-tr-lg"></div>
+                    <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-orange-500 -mb-1 -ml-1 rounded-bl-lg"></div>
+                    <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-orange-500 -mb-1 -mr-1 rounded-br-lg"></div>
+                  </div>
+               </div>
+            </div>
 
-      {/* Kamera Button */}
-      <div className="cam flex-grow flex items-center justify-center mb-8">
-        <button 
-          onClick={() => setShowCamera(true)}
-          className="p-6 rounded-xl border-2 border-gray-800 text-gray-800 hover:bg-gray-50 transition-colors flex flex-col items-center gap-2"
-        >
-          <Camera size={48} strokeWidth={1.5} />
-          <span className="text-sm font-medium">Foto scannen</span>
-        </button>
-      </div>
+            {/* Auslöser Button */}
+            <div className="p-10 flex justify-center items-center bg-gradient-to-t from-black/80 to-transparent absolute bottom-0 w-full">
+              <button 
+                onClick={capture}
+                className="w-20 h-20 rounded-full border-4 border-white bg-orange-500 hover:scale-105 hover:bg-orange-400 transition-all shadow-xl ring-4 ring-white/20"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* --- LOADING STATE --- */}
+        {isAnalyzing && (
+          <div className="fixed inset-0 z-40 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+            <div className="w-16 h-16 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin"></div>
+            <div className="text-xl font-bold text-zinc-800 animate-pulse">KI analysiert Produkt...</div>
+          </div>
+        )}
+
+        {/* --- MAIN FORM CARD --- */}
+        <div className="bg-white rounded-3xl shadow-xl border border-zinc-100 overflow-hidden p-6 sm:p-8">
+          
+          {/* 1. KI SCANNER SECTION */}
+          <div className="mb-8">
+            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Schnellsuche</label>
+            <button 
+              onClick={() => setShowCamera(true)}
+              className="w-full group relative overflow-hidden rounded-2xl bg-zinc-50 border-2 border-dashed border-zinc-300 hover:border-orange-500 hover:bg-orange-50 transition-all duration-300 p-6 text-center cursor-pointer"
+            >
+              <div className="flex flex-col items-center gap-3 relative z-10">
+                <div className="w-14 h-14 rounded-full bg-white shadow-sm flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform duration-300 ring-1 ring-zinc-100">
+                  <Camera size={28} strokeWidth={2} />
+                </div>
+                <div>
+                  <span className="block font-bold text-zinc-800 text-lg">Foto scannen</span>
+                  <span className="text-sm text-zinc-500 group-hover:text-orange-600 transition-colors">Produkt oder Etikett fotografieren</span>
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* DIVIDER */}
+          <div className="relative flex items-center gap-4 mb-8">
+            <div className="h-[1px] flex-1 bg-zinc-200"></div>
+            <span className="text-xs font-bold text-zinc-400 uppercase">Oder manuell</span>
+            <div className="h-[1px] flex-1 bg-zinc-200"></div>
+          </div>
+
+          {/* 2. MANUAL INPUTS */}
+          <div className="space-y-5">
+            <div>
+              <label className="block text-sm font-semibold text-zinc-700 mb-2 ml-1">Artikelnummer</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="artikelnummer"
+                  placeholder="z.B. 400123..."
+                  className="w-full p-4 pl-4 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent focus:bg-white transition-all"
+                  value={formData.artikelnummer}
+                  onChange={handleChange}
+                />
+                <ScanLine size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-zinc-700 mb-2 ml-1">Bezeichnung</label>
+              <input
+                type="text"
+                name="title"
+                placeholder="Was suchst du?"
+                className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent focus:bg-white transition-all"
+                value={formData.title}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-zinc-700 mb-2 ml-1">Beschreibung / Notiz</label>
+              <textarea
+                name="beschreibung"
+                rows={3}
+                placeholder="Zusätzliche Infos..."
+                className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent focus:bg-white transition-all resize-none"
+                value={formData.beschreibung}
+                onChange={handleChange}
+              />
+            </div>
+          </div>
 
       <button 
         onClick={handleSearch}
@@ -182,5 +291,9 @@ export default function ArtikelForm() {
         Artikel suchen
       </button>
     </div>
+
+    </div>
+
+  </div>
   );
 };
