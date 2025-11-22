@@ -41,8 +41,8 @@ export default function ProduktDetail() {
     router.push(`/MarktNavi/1?${params.toString()}`);
   };
 
-  // Wir nehmen für die Demo einfach den ersten Artikel oder einen Dummy, 
-  // da im Originalcode keine Logik zum Auswählen aus `artikelListe` war.
+  // für ersten Artikel eine Dummy, 
+  //  artikelListe falls wirs noch .
   const produkt = artikelListe[0]; 
 
   return (

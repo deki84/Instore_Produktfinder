@@ -143,7 +143,7 @@ export default function ArtikelForm() {
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-800 pb-10">
       
-      {/* --- HEADER (OBI STYLE) --- */}
+
       <div className="bg-orange-500 pt-12 pb-8 px-6 shadow-lg rounded-b-[2.5rem]">
         <div className="max-w-md mx-auto">
             <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
@@ -172,7 +172,7 @@ export default function ArtikelForm() {
               </button>
             </div>
 
-            {/* Webcam Feed (Native Video) */}
+
             <div className="flex-grow flex items-center justify-center bg-black relative overflow-hidden">
                <video 
                  ref={videoRef}
@@ -194,8 +194,6 @@ export default function ArtikelForm() {
                   </div>
                </div>
             </div>
-
-            {/* Auslöser Button */}
             <div className="p-10 flex justify-center items-center bg-gradient-to-t from-black/80 to-transparent absolute bottom-0 w-full">
               <button 
                 onClick={capture}
@@ -213,10 +211,8 @@ export default function ArtikelForm() {
           </div>
         )}
 
-        {/* --- MAIN FORM CARD --- */}
+
         <div className="bg-white rounded-3xl shadow-xl border border-zinc-100 overflow-hidden p-6 sm:p-8">
-          
-          {/* 1. KI SCANNER SECTION */}
           <div className="mb-8">
             <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Schnellsuche</label>
             <button 
@@ -234,15 +230,11 @@ export default function ArtikelForm() {
               </div>
             </button>
           </div>
-
-          {/* DIVIDER */}
           <div className="relative flex items-center gap-4 mb-8">
             <div className="h-[1px] flex-1 bg-zinc-200"></div>
             <span className="text-xs font-bold text-zinc-400 uppercase">Oder manuell</span>
             <div className="h-[1px] flex-1 bg-zinc-200"></div>
           </div>
-
-          {/* 2. MANUAL INPUTS */}
           <div className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-zinc-700 mb-2 ml-1">Artikelnummer</label>

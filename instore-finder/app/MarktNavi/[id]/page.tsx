@@ -427,18 +427,30 @@ export default function MarktNaviPage() {
       {/* UI Controls */}
       {!isSelectingLocation && (
         <>
-            <div className="absolute top-0 left-0 right-0 p-4 z-10 pointer-events-none">
-                <div className="max-w-2xl mx-auto flex gap-3 pointer-events-auto">
-                    <button onClick={() => setSidebarOpen(true)} className="p-3 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-lg rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-white transition-all"><Menu size={24} /></button>
-                    {/* <div className="flex-1 relative group">
-                        <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Search size={20} className="text-zinc-400" /></div>
-                        <input type="text" placeholder="Gang oder Produkt suchen..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full py-3 pl-10 pr-4 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-lg rounded-full border-none outline-none focus:ring-2 focus:ring-orange-500 text-zinc-800 dark:text-zinc-100 transition-all" />
-                    </div> */}
-                </div>
-                <div className="max-w-2xl mx-auto mt-2 flex justify-end -mt-10 pointer-events-auto">
-                    <button onClick={() => setIsSelectingLocation(true)} className="flex items-center gap-2 bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full text-xs hover:bg-black/80 transition-colors">
-                        <Target size={12} /> {userLocation ? "Standort ändern" : "Standort: Eingang"}
+            <div className="absolute top-4 left-4 z-10 pointer-events-none">
+                {/* Container für beide Elemente: Flex-Spalte, linksbündig (items-start) */}
+                <div className="flex flex-col items-start gap-3 pointer-events-auto">
+                    
+                    {/* Button 1: Menü */}
+                    <button 
+                        onClick={() => setSidebarOpen(true)} 
+                        className="p-3 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-lg rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-white transition-all"
+                    >
+                        <Menu size={24} />
                     </button>
+
+                    {/* Suche (auskommentiert gelassen, würde sich aber auch links einreihen) */}
+                    {/* <div className="...">...</div> */}
+
+                    {/* Button 2: Standort */}
+                    <button 
+                        onClick={() => setIsSelectingLocation(true)} 
+                        className="flex items-center gap-2 bg-black/60 backdrop-blur text-white px-3 py-1.5 rounded-full text-xs hover:bg-black/80 transition-colors shadow-md"
+                    >
+                        <Target size={16} /> {/* Icon etwas kleiner für bessere Proportionen */}
+                        <span>{userLocation ? "Standort ändern" : "Standort: Eingang"}</span>
+                    </button>
+
                 </div>
             </div>
 
