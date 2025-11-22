@@ -5,10 +5,20 @@ from sentence_transformers import SentenceTransformer
 from sklearn.neighbors import NearestNeighbors
 import joblib
 import re
+import psycopg2
+
 
 # neu: Import deiner Bild→Text Funktion
 from image_to_text_ionos import image_to_text
 
+DB_URL = "postgresql://postgres:8LaYupWn0MkWaZ@db.qisdavfzqiseuztwusjz.supabase.co:5432/postgres"
+
+conn = psycopg2.connect(DB_URL)
+
+df_prod = pd.read_sql("SELECT * FROM products", conn)
+df_prod["Art_Nr"] = df_prod["Art_Nr"].astype(str).str.strip()
+
+print("Produkte geladen:", len(df_prod))
 
 # paths relative to this file
 BASE_DIR = Path(__file__).parent
