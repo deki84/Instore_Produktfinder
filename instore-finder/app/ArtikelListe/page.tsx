@@ -4,9 +4,10 @@ import { Camera, X, RefreshCw, Sparkles, ScanLine } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Webcam from 'react-webcam';
 import { saveImageToServer } from '../actions/saveImage';
+import  analyzeProductWithAI  from '../actions/analyzeProduct';
 
 
-const WebcamComponent = Webcam as any;
+const WebcamComponent = Webcam as typeof Webcam;
 
 export default function ArtikelForm() {
   const router = useRouter();
@@ -39,7 +40,7 @@ export default function ArtikelForm() {
     if (formData.artikelnummer) params.set('id', formData.artikelnummer);
     if (formData.title) params.set('titel', formData.title);
     if (formData.beschreibung) params.set('desc', formData.beschreibung);
-    router.push(`/detail/123?${params.toString()}`);
+    router.push(`/ProduktAuswahl/123${params.toString()}`);
   };
 
   // KAMERA LOGIK (Native HTML5)
@@ -112,7 +113,8 @@ export default function ArtikelForm() {
           console.log("Bild gespeichert.");
           
           // HIER KOMMT DIE KI AGENT LOGIK HIN  
-          await analyzeImageWithAI(imageSrc);
+          // await analyzeImageWithAI(imageSrc);
+          await analyzeProductWithAI(new FormData()); // Platzhalter, hier müssten die echten Daten rein
           
           setIsAnalyzing(false);
         }
@@ -124,11 +126,12 @@ export default function ArtikelForm() {
   const analyzeImageWithAI = async (base64Image: string) => {
     console.log("Sende Bild an KI...", base64Image.slice(0, 50) + "...");
     
-    // SIMULATION
+    // Simulation der Analysezeit 
     return new Promise<void>((resolve) => {
       setTimeout(() => {
         setFormData(prev => ({
           ...prev,
+          // Als werte müssen wir dann die Antwort der KI einfügen
           artikelnummer: '47110815',
           title: 'Bosch Akku-Schrauber IXO',
           beschreibung: 'Kompakter Akkuschrauber, 3.6V, inkl. Bit-Set. Ideal für Möbelaufbau.'
@@ -264,11 +267,11 @@ export default function ArtikelForm() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-zinc-700 mb-2 ml-1">Beschreibung / Notiz</label>
+              <label className="block text-sm font-semibold text-zinc-700 mb-2 ml-1">Beschreibung</label>
               <textarea
                 name="beschreibung"
                 rows={3}
-                placeholder="Zusätzliche Infos..."
+                placeholder="Zusätzliche Infos...in Natürlicher Sprache"
                 className="w-full p-4 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent focus:bg-white transition-all resize-none"
                 value={formData.beschreibung}
                 onChange={handleChange}

@@ -2,11 +2,20 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
-import mapImage from '../../assets/map.jpg'; 
-import { Search, Plus, Minus, MapPin, Navigation, Menu, X, ChevronRight, Compass, Target, Check, Footprints } from 'lucide-react';
+import mapImage from '../../assets/map.jpg';
+import { Search, Plus, Minus, MapPin, Navigation, Menu, X, ChevronRight, Compass, Target, Check, Footprints, Info } from 'lucide-react';
 
-// --- DEINE NEUEN DATEN ---
-// Pixel-Koordinaten werden unten dynamisch in % umgerechnet
+// --- PRODUKT MAPPING (Simulation einer Datenbank) ---
+const PRODUCT_ID_MAP: Record<string, string> = {
+  "1": "Werkzeuge",      // Bosch IXO
+  "2": "Werkzeuge",      // Lux Tools
+  "3": "Werkzeuge",      // Makita
+  "47110815": "Werkzeuge",
+  "123": "Sanitär und Keramik",
+  "default": "Info"
+};
+
+// --- MARKTDATEN ---
 const PRODUCT_DATA = [
   { "aisle": "1", "category": "Sanitär und Keramik", "coordinates": { "x": 1220, "y": 670 } },
   { "aisle": "2", "category": "Sanitär und Keramik", "coordinates": { "x": 1220, "y": 670 } },
@@ -57,14 +66,14 @@ const PRODUCT_DATA = [
   { "aisle": "49", "category": "Leuchten", "coordinates": { "x": 900, "y": 700 } },
   { "aisle": "50", "category": "Leuchten", "coordinates": { "x": 900, "y": 700 } },
   { "aisle": "51", "category": "Leuchten", "coordinates": { "x": 900, "y": 700 } },
-  { "aisle": "52", "category": "Leuchten", "coordinates": { "x": 900, "y": 700 } }
+  { "aisle": "52", "category": "Leuchten", "coordinates": { "x": 900, "y": 700 } },
+  { "aisle": "info", "category": "Info", "coordinates": { "x": 55, "y": 80 } } // Fallback
 ];
 
 // --- KONSTANTEN FÜR UMRCHUNG ---
-const MAP_WIDTH = 1920; 
+const MAP_WIDTH = 1920;
 const MAP_HEIGHT = 1080;
 
-// --- DATENTYPEN ---
 
 interface Point {
   x: number;
@@ -78,37 +87,24 @@ interface GraphNode {
   neighbors: string[];
 }
 
-// --- A* GRAPH DEFINITION ---
+// --- A* ---
 const WAYPOINT_GRAPH: GraphNode[] = [
-  // 1. EINGANGSBEREICH (Vertikale Achse)
   { id: 'entry_hall', x: 55, y: 82, neighbors: ['main_corridor_center'] },
-  
-  // Haupt-Verteiler in der Mitte (Y=72)
   { id: 'main_corridor_center', x: 55, y: 72, neighbors: ['entry_hall', 'aisle_paint_mid'] },
-
-  // 2. HORIZONTALE HAUPTACHSE (Y=59)
-  { id: 'garden_back', x: 15, y: 51, neighbors: ['garden_entry'] },
-  { id: 'garden_entry', x: 25, y: 51, neighbors: ['garden_back', 'garden_center'] },
+  { id: 'garden_entry', x: 25, y: 51, neighbors: ['garden_center'] },
   { id: 'garden_center', x: 25, y: 59, neighbors: ['garden_entry', 'aisle_paint_back'] },
-
   { id: 'aisle_paint_back', x: 32, y: 59, neighbors: ['garden_center', 'aisle_tools_entry'] },
   { id: 'aisle_tools_entry', x: 39, y: 59, neighbors: ['aisle_paint_back', 'aisle_tools_back'] },
   { id: 'aisle_tools_back', x: 45, y: 59, neighbors: ['aisle_tools_entry', 'aisle_tools_mid'] },
   { id: 'aisle_tools_mid', x: 50, y: 59, neighbors: ['aisle_tools_back', 'aisle_paint_mid'] },
-
-  // ZENTRUM (Kreuzungspunkt Y=59 / X=55)
   { id: 'aisle_paint_mid', x: 55, y: 59, neighbors: ['aisle_tools_mid', 'main_corridor_center', 'main_corridor_sanitary'] },
-
-  // Rechter Flügel
   { id: 'main_corridor_sanitary', x: 63, y: 59, neighbors: ['aisle_paint_mid', 'wood_center'] },
   { id: 'wood_center', x: 70, y: 59, neighbors: ['main_corridor_sanitary', 'wood_back'] },
   { id: 'wood_back', x: 75, y: 59, neighbors: ['wood_center', 'wood_entry'] },
   { id: 'wood_entry', x: 80, y: 59, neighbors: ['wood_back'] },
 ];
 
-const getDistance = (a: Point, b: Point) => {
-  return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
-};
+const getDistance = (a: Point, b: Point) => Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
 
 const findNearestNode = (point: Point, graph: GraphNode[]): GraphNode => {
   let nearest = graph[0];
@@ -131,7 +127,7 @@ const findPathAStar = (startPos: Point, endPos: Point, graph: GraphNode[]): Poin
 
   const openSet: string[] = [startNode.id];
   const cameFrom: Record<string, string> = {};
-  
+
   const gScore: Record<string, number> = {};
   graph.forEach(n => gScore[n.id] = Infinity);
   gScore[startNode.id] = 0;
@@ -141,7 +137,7 @@ const findPathAStar = (startPos: Point, endPos: Point, graph: GraphNode[]): Poin
   fScore[startNode.id] = getDistance(startNode, endNode);
 
   while (openSet.length > 0) {
-    let currentId = openSet.reduce((lowest, id) => (fScore[id] < fScore[lowest] ? id : lowest), openSet[0]);
+    const currentId = openSet.reduce((lowest, id) => (fScore[id] < fScore[lowest] ? id : lowest), openSet[0]);
 
     if (currentId === endNode.id) {
       const path: Point[] = [];
@@ -161,7 +157,7 @@ const findPathAStar = (startPos: Point, endPos: Point, graph: GraphNode[]): Poin
 
     currentNode.neighbors.forEach(neighborId => {
       const neighbor = graph.find(n => n.id === neighborId);
-      if(!neighbor) return; 
+      if (!neighbor) return;
       const tentativeGScore = gScore[currentId] + getDistance(currentNode, neighbor);
       if (tentativeGScore < gScore[neighborId]) {
         cameFrom[neighborId] = currentId;
@@ -171,20 +167,22 @@ const findPathAStar = (startPos: Point, endPos: Point, graph: GraphNode[]): Poin
       }
     });
   }
-  return [startPos, endPos]; 
+  return [startPos, endPos];
 };
 
-const DEFAULT_START = { x: 54, y: 92 }; 
+const DEFAULT_START = { x: 55, y: 71 };
 
-export default function MarktNaviPage() {
+export default function MarktNaviPage(props: any) {
+  // Unwrap params safely (support for Next.js 15+ async params or older object params)
+  const params = props.params;
+
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  
-  const [userLocation, setUserLocation] = useState<{x: number, y: number} | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // Default open to show target info
+
+  const [userLocation, setUserLocation] = useState<{ x: number, y: number } | null>(null);
   const [isSelectingLocation, setIsSelectingLocation] = useState(false);
   const [clickStartTime, setClickStartTime] = useState(0);
 
@@ -192,31 +190,51 @@ export default function MarktNaviPage() {
   const [compassActive, setCompassActive] = useState(false);
 
   const [activePath, setActivePath] = useState<Point[] | null>(null);
-  const [destination, setDestination] = useState<any | null>(null); // any weil wir jetzt raw objects nutzen
+  const [destination, setDestination] = useState<any | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapWrapperRef = useRef<HTMLDivElement>(null);
 
-  //normalisierte Koordinaten (%)
-  const getNormalizedPoint = (coords: {x: number, y: number}) => ({
+  const getNormalizedPoint = (coords: { x: number, y: number }) => ({
     x: (coords.x / MAP_WIDTH) * 100,
     y: (coords.y / MAP_HEIGHT) * 100
   });
 
-  const startNavigation = (product: any) => {
-    const start = userLocation || DEFAULT_START;
-    const end = getNormalizedPoint(product.coordinates);
-    
-    const path = findPathAStar(start, end, WAYPOINT_GRAPH);
-    setActivePath(path);
-    setDestination(product);
-    setSidebarOpen(false);
-  };
+  // --- AUTOMATIC NAVIGATION LOGIC ---
+  useEffect(() => {
+    const initNavigation = async () => {
+      let productId = "1"; // Default fallback
 
-  const stopNavigation = () => {
-    setActivePath(null);
-    setDestination(null);
-  };
+      if (params) {
+        // Handle promise-based params (Next.js 15) or object (Next.js 14)
+        const resolvedParams = params instanceof Promise ? await params : params;
+        if (resolvedParams?.id) {
+          productId = resolvedParams.id;
+        }
+      }
+
+      // 1. Produkt Kategorie ermitteln
+      const targetCategory = PRODUCT_ID_MAP[productId] || "Werkzeuge";
+
+      // 2. Passendes Ziel in den Kartendaten finden
+      const targetProduct = PRODUCT_DATA.find(p => p.category === targetCategory) || PRODUCT_DATA[0];
+
+      // 3. Navigation starten
+      if (targetProduct) {
+        setDestination(targetProduct);
+        const start = userLocation || DEFAULT_START;
+        const end = getNormalizedPoint(targetProduct.coordinates);
+        const path = findPathAStar(start, end, WAYPOINT_GRAPH);
+        setActivePath(path);
+
+        // Optional: Zoom auf Ziel beim Start
+        // setPosition({ x: -targetProduct.coordinates.x / 2, y: -targetProduct.coordinates.y / 2 });
+      }
+    };
+
+    initNavigation();
+  }, [params, userLocation]);
+
 
   useEffect(() => {
     return () => { window.removeEventListener('deviceorientation', handleOrientation); };
@@ -230,18 +248,18 @@ export default function MarktNaviPage() {
   };
 
   const toggleCompass = async () => {
-     if (!compassActive) {
-       if (typeof DeviceOrientationEvent !== 'undefined' && (DeviceOrientationEvent as any).requestPermission) {
-          try {
-            const resp = await (DeviceOrientationEvent as any).requestPermission();
-            if (resp === 'granted') { setCompassActive(true); window.addEventListener('deviceorientation', handleOrientation); }
-          } catch (e) { console.error(e); }
-       } else {
-          setCompassActive(true); window.addEventListener('deviceorientation', handleOrientation);
-       }
-     } else {
-         setCompassActive(false); setHeading(0); window.removeEventListener('deviceorientation', handleOrientation);
-     }
+    if (!compassActive) {
+      if (typeof DeviceOrientationEvent !== 'undefined' && (DeviceOrientationEvent as any).requestPermission) {
+        try {
+          const resp = await (DeviceOrientationEvent as any).requestPermission();
+          if (resp === 'granted') { setCompassActive(true); window.addEventListener('deviceorientation', handleOrientation); }
+        } catch (e) { console.error(e); }
+      } else {
+        setCompassActive(true); window.addEventListener('deviceorientation', handleOrientation);
+      }
+    } else {
+      setCompassActive(false); setHeading(0); window.removeEventListener('deviceorientation', handleOrientation);
+    }
   };
 
   const handleZoom = (delta: number) => setScale(prev => Math.min(Math.max(prev + delta, 1), 4));
@@ -273,39 +291,36 @@ export default function MarktNaviPage() {
     const clickRect = target.getBoundingClientRect();
     const percentX = ((e.clientX - clickRect.left) / clickRect.width) * 100;
     const percentY = ((e.clientY - clickRect.top) / clickRect.height) * 100;
-    
-    setUserLocation({ x: percentX, y: percentY });
-    if (destination) {
-        // Recalculate Path
-        const end = getNormalizedPoint(destination.coordinates);
-        const newPath = findPathAStar({ x: percentX, y: percentY }, end, WAYPOINT_GRAPH);
-        setActivePath(newPath);
-    }
-  };
 
-  const filteredData = PRODUCT_DATA.filter(item => 
-    item.category.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    item.aisle.includes(searchQuery)
-  );
+    setUserLocation({ x: percentX, y: percentY });
+    // Recalculate if destination exists
+    if (destination) {
+      const end = getNormalizedPoint(destination.coordinates);
+      const newPath = findPathAStar({ x: percentX, y: percentY }, end, WAYPOINT_GRAPH);
+      setActivePath(newPath);
+    }
+    setIsSelectingLocation(false);
+  };
 
   const pathString = useMemo(() => {
     if (!activePath || activePath.length < 2) return "";
-    return activePath.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    return activePath.map((p, i) => `${ i === 0 ? 'M' : 'L' } ${ p.x } ${ p.y }`).join(' ');
   }, [activePath]);
 
   return (
     <div className="relative w-full h-screen bg-zinc-900 overflow-hidden font-sans text-zinc-800 dark:text-zinc-100">
-      
-      {/* Navigation Overlay */}
+
+      {/* Top Destination Indicator */}
       {destination && !isSelectingLocation && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-30 bg-white/90 dark:bg-zinc-800/90 backdrop-blur px-4 py-2 rounded-full shadow-lg border-2 border-orange-500 flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
-            <div className="text-sm">
-                <span className="text-zinc-500">Ziel: </span>
-                <span className="font-bold text-orange-600">{destination.category} (Gang {destination.aisle})</span>
-            </div>
-            <button onClick={stopNavigation} className="p-1 bg-zinc-200 dark:bg-zinc-700 rounded-full hover:bg-zinc-300">
-                <X size={14} />
-            </button>
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 bg-white/90 dark:bg-zinc-800/90 backdrop-blur px-5 py-3 rounded-2xl shadow-xl border-2 border-orange-500 flex items-center gap-4 animate-in fade-in slide-in-from-top-4 max-w-[90%]">
+          <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-full text-orange-600">
+            <Target size={20} />
+          </div>
+          <div className="text-sm">
+            <div className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Dein Ziel</div>
+            <div className="font-bold text-zinc-800 dark:text-white text-lg leading-tight">{destination.category}</div>
+            <div className="text-xs text-orange-600 font-medium">Gang {destination.aisle}</div>
+          </div>
         </div>
       )}
 
@@ -315,109 +330,81 @@ export default function MarktNaviPage() {
           <div className="max-w-2xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Target className="animate-pulse" />
-              <span className="font-medium">Tippe auf deinen Standort</span>
+              <span className="font-medium">Tippe auf deinen Standort auf der Karte</span>
             </div>
-            <div className="flex gap-2">
-               <button onClick={() => setIsSelectingLocation(false)} className="px-3 py-1.5 bg-orange-600 rounded-lg text-sm hover:bg-orange-700">Abbrechen</button>
-               {userLocation && (
-                <button onClick={() => setIsSelectingLocation(false)} className="px-3 py-1.5 bg-white text-orange-600 font-bold rounded-lg text-sm flex items-center gap-1"><Check size={16} /> Fertig</button>
-               )}
-            </div>
+            <button onClick={() => setIsSelectingLocation(false)} className="px-3 py-1.5 bg-white/20 rounded-lg text-sm hover:bg-white/30">Abbrechen</button>
           </div>
         </div>
       )}
 
       {/* Map Area */}
-      <div 
+      <div
         ref={containerRef}
-        className={`w-full h-full flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 transition-colors duration-300 ${isSelectingLocation ? 'cursor-crosshair' : (isDragging ? 'cursor-grabbing' : 'cursor-grab')}`}
+        className={`w-full h-full flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 transition-colors duration-300 ${ isSelectingLocation ? 'cursor-crosshair' : (isDragging ? 'cursor-grabbing' : 'cursor-grab') }`}
         onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         onWheel={(e) => handleZoom(e.deltaY > 0 ? -0.1 : 0.1)}
       >
-        <div 
+        <div
           ref={mapWrapperRef}
-          style={{ 
-            transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${-heading}deg)`,
+          style={{
+            transform: `translate(${ position.x }px, ${ position.y }px) scale(${ scale }) rotate(${ -heading }deg)`,
             transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
           }}
-          className="relative w-full h-full max-w-[1920px] max-h-[1080px] origin-center will-change-transform" 
+          className="relative w-full h-full max-w-[1920px] max-h-[1080px] origin-center will-change-transform"
         >
           <Image src={mapImage} alt="Markt Plan" fill quality={100} priority className="object-contain select-none pointer-events-none" />
 
           {/* Route SVG Layer */}
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
-                <marker id="arrowhead" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto">
-                    <polygon points="0 0, 4 2, 0 4" fill="#f97316" />
-                </marker>
-                <marker id="startdot" markerWidth="4" markerHeight="4" refX="2" refY="2">
-                    <circle cx="2" cy="2" r="2" fill="#f97316" />
-                </marker>
+              <marker id="arrowhead" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto">
+                <polygon points="0 0, 4 2, 0 4" fill="#f97316" />
+              </marker>
+              <marker id="startdot" markerWidth="4" markerHeight="4" refX="2" refY="2">
+                <circle cx="2" cy="2" r="2" fill="#f97316" />
+              </marker>
             </defs>
-            
+
             {activePath && (
-                <>
-                    <path d={pathString} fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
-                    <path 
-                        d={pathString} 
-                        fill="none" 
-                        stroke="#f97316" 
-                        strokeWidth="0.8" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round"
-                        strokeDasharray="2,1" 
-                        markerEnd="url(#arrowhead)"
-                        markerStart="url(#startdot)"
-                        className="animate-dash" 
-                    />
-                </>
+              <>
+                <path d={pathString} fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+                <path
+                  d={pathString}
+                  fill="none"
+                  stroke="#f97316"
+                  strokeWidth="0.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray="2,1"
+                  markerEnd="url(#arrowhead)"
+                  markerStart="url(#startdot)"
+                  className="animate-dash"
+                />
+              </>
             )}
           </svg>
 
-          {/* --- GRÜNEN PUNKTE UM NICHT DURCHZUDREHEN--- */}
-          {/* {PRODUCT_DATA.map((product, index) => (
-            <div 
-              key={index}
-              className="absolute z-30 w-3 h-3 bg-green-500 rounded-full border border-white shadow-sm pointer-events-none hover:bg-green-400 transition-colors"
-              style={{ 
-                // Umrechnung von Pixel (z.B. 1220) in Prozent relativ zum Bildcontainer
-                left: `${(product.coordinates.x / MAP_WIDTH) * 100}%`, 
-                top: `${(product.coordinates.y / MAP_HEIGHT) * 100}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-              title={`${product.category} (Gang ${product.aisle})`}
-            />
-          ))}
-
-          {/* Debug Nodes (Rot) -.- */
-          /* {WAYPOINT_GRAPH.map((node) => (
-            <div 
-              key={node.id} 
-              className="absolute z-40 w-2 h-2 bg-red-600 rounded-full border border-white shadow-sm pointer-events-none opacity-50"
-              style={{ left: `${node.x}%`, top: `${node.y}%`, transform: 'translate(-50%, -50%)' }}
-            />
-          ))} */ }
-
-          {/* Pins */}
+          {/* User Pin */}
           {userLocation && (
-            <div className="absolute z-20 transform -translate-x-1/2 -translate-y-full drop-shadow-xl" style={{ left: `${userLocation.x}%`, top: `${userLocation.y}%` }}>
+            <div className="absolute z-20 transform -translate-x-1/2 -translate-y-full drop-shadow-xl" style={{ left: `${ userLocation.x }%`, top: `${ userLocation.y }%` }}>
               <div className="relative">
                 <MapPin size={48} className="text-orange-600 fill-orange-600 animate-bounce" />
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-black/30 blur-sm rounded-full"></div>
               </div>
             </div>
           )}
-          
+
+          {/* Destination Pin */}
           {destination && (
-            <div className="absolute z-20 transform -translate-x-1/2 -translate-y-full drop-shadow-xl" 
-                style={{ 
-                    left: `${(destination.coordinates.x / MAP_WIDTH) * 100}%`, 
-                    top: `${(destination.coordinates.y / MAP_HEIGHT) * 100}%` 
-                }}>
-                <MapPin size={48} className="text-blue-600 fill-blue-600" />
-                <span className="absolute top-full left-1/2 -translate-x-1/2 bg-white text-black text-xs font-bold px-2 py-1 rounded shadow mt-1 whitespace-nowrap">
-                    {destination.category}
-                </span>
+            <div className="absolute z-20 transform -translate-x-1/2 -translate-y-full drop-shadow-xl"
+              style={{
+                left: `${ (destination.coordinates.x / MAP_WIDTH) * 100 }%`,
+                top: `${ (destination.coordinates.y / MAP_HEIGHT) * 100 }%`
+              }}>
+              <MapPin size={48} className="text-blue-600 fill-blue-600" />
+              <span className="absolute top-full left-1/2 -translate-x-1/2 bg-white text-black text-xs font-bold px-2 py-1 rounded shadow mt-1 whitespace-nowrap">
+                {destination.category}
+              </span>
             </div>
           )}
 
@@ -427,65 +414,83 @@ export default function MarktNaviPage() {
       {/* UI Controls */}
       {!isSelectingLocation && (
         <>
-            <div className="absolute top-4 left-4 z-10 pointer-events-none">
-                {/* Container für beide Elemente: Flex-Spalte, linksbündig (items-start) */}
-                <div className="flex flex-col items-start gap-3 pointer-events-auto">
-                    
-                    {/* Button 1: Menü */}
-                    <button 
-                        onClick={() => setSidebarOpen(true)} 
-                        className="p-3 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-lg rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-white transition-all"
-                    >
-                        <Menu size={24} />
-                    </button>
+          <div className="absolute top-4 left-4 z-10 flex flex-col items-start gap-3 pointer-events-auto">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-3 bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-lg rounded-full text-zinc-700 dark:text-zinc-200 hover:bg-white transition-all"
+            >
+              <Menu size={24} />
+            </button>
 
-                    {/* Suche (auskommentiert gelassen, würde sich aber auch links einreihen) */}
-                    {/* <div className="...">...</div> */}
+            <button
+              onClick={() => setIsSelectingLocation(true)}
+              className="flex items-center gap-2 bg-black/60 backdrop-blur text-white px-3 py-2 rounded-full text-xs hover:bg-black/80 transition-colors shadow-md"
+            >
+              <Target size={16} />
+              <span>{userLocation ? "Standort korrigieren" : "Startpunkt setzen"}</span>
+            </button>
+          </div>
 
-                    {/* Button 2: Standort */}
-                    <button 
-                        onClick={() => setIsSelectingLocation(true)} 
-                        className="flex items-center gap-2 bg-black/60 backdrop-blur text-white px-3 py-1.5 rounded-full text-xs hover:bg-black/80 transition-colors shadow-md"
-                    >
-                        <Target size={16} /> {/* Icon etwas kleiner für bessere Proportionen */}
-                        <span>{userLocation ? "Standort ändern" : "Standort: Eingang"}</span>
-                    </button>
-
-                </div>
+          <div className="absolute bottom-8 right-6 z-10 flex flex-col gap-3 pointer-events-auto">
+            <div className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-xl rounded-2xl p-1.5 flex flex-col gap-1">
+              <button onClick={() => handleZoom(0.5)} className="p-3 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-xl"><Plus size={24} /></button>
+              <div className="h-[1px] w-full bg-zinc-200 dark:bg-zinc-700 mx-auto" />
+              <button onClick={() => handleZoom(-0.5)} className="p-3 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-xl"><Minus size={24} /></button>
             </div>
-
-            <div className="absolute bottom-8 right-6 z-10 flex flex-col gap-3 pointer-events-auto">
-                <div className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md shadow-xl rounded-2xl p-1.5 flex flex-col gap-1">
-                    <button onClick={() => handleZoom(0.5)} className="p-3 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-xl"><Plus size={24} /></button>
-                    <div className="h-[1px] w-full bg-zinc-200 dark:bg-zinc-700 mx-auto" />
-                    <button onClick={() => handleZoom(-0.5)} className="p-3 hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-xl"><Minus size={24} /></button>
-                </div>
-                <button onClick={toggleCompass} className={`p-4 shadow-xl rounded-2xl flex items-center justify-center ${compassActive ? 'bg-blue-600 text-white' : 'bg-white/90 dark:bg-zinc-800/90 text-zinc-700'}`}><Compass size={24} /></button>
-                <button onClick={() => { setScale(1); setPosition({x:0, y:0}); setHeading(0); }} className="p-4 bg-orange-500 text-white shadow-xl rounded-2xl hover:bg-orange-600"><Navigation size={24} /></button>
-            </div>
+            <button onClick={toggleCompass} className={`p-4 shadow-xl rounded-2xl flex items-center justify-center ${ compassActive ? 'bg-blue-600 text-white' : 'bg-white/90 dark:bg-zinc-800/90 text-zinc-700' }`}><Compass size={24} /></button>
+            <button onClick={() => { setScale(1); setPosition({ x: 0, y: 0 }); setHeading(0); }} className="p-4 bg-orange-500 text-white shadow-xl rounded-2xl hover:bg-orange-600"><Navigation size={24} /></button>
+          </div>
         </>
       )}
 
-      {/* Sidebar */}
-      <div className={`absolute inset-y-0 left-0 w-full sm:w-96 bg-white dark:bg-zinc-900 shadow-2xl transform transition-transform duration-300 ease-in-out z-20 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      {/* Modified Sidebar: Shows Info Only */}
+      <div className={`absolute inset-y-0 left-0 w-full sm:w-80 bg-white dark:bg-zinc-900 shadow-2xl transform transition-transform duration-300 ease-in-out z-20 ${ sidebarOpen ? 'translate-x-0' : '-translate-x-full' }`}>
         <div className="flex flex-col h-full">
           <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-            <div><h2 className="text-xl font-bold text-zinc-900 dark:text-white">Markt Übersicht</h2><p className="text-sm text-zinc-500">Wetzlar</p></div>
+            <div><h2 className="text-xl font-bold text-zinc-900 dark:text-white">Navigation</h2><p className="text-sm text-zinc-500">Markt Wetzlar</p></div>
             <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full"><X size={24} /></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4">
-              <div className="space-y-2">
-                {filteredData.map((item, index) => (
-                  <div key={index} onClick={() => startNavigation(item)} className="flex items-center justify-between p-4 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border border-transparent hover:border-orange-200 dark:hover:border-orange-900 transition-all group cursor-pointer">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-800 text-zinc-600 flex items-center justify-center group-hover:bg-orange-100 group-hover:text-orange-600 transition-colors"><Footprints size={20} /></div>
-                      <div><h3 className="font-medium text-zinc-800 dark:text-zinc-200">{item.category}</h3><p className="text-xs text-zinc-500">Gang {item.aisle}</p></div>
+          <div className="p-6 flex-1 overflow-y-auto">
+            {destination ? (
+              <div className="space-y-6">
+                <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800 rounded-2xl">
+                  <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-2">Aktuelles Ziel</h3>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm">🛒</div>
+                    <div>
+                      <div className="font-bold text-lg dark:text-white">{destination.category}</div>
+                      <div className="text-sm text-zinc-500">Gang {destination.aisle}</div>
                     </div>
-                    <ChevronRight size={18} className="text-zinc-300 group-hover:text-orange-500 transition-colors" />
                   </div>
-                ))}
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Info size={18} />
+                    Wegbeschreibung
+                  </h3>
+                  <ol className="relative border-l border-zinc-200 dark:border-zinc-700 ml-3 space-y-6">
+                    <li className="mb-2 ml-6">
+                      <span className="absolute flex items-center justify-center w-6 h-6 bg-zinc-200 rounded-full -left-3 ring-4 ring-white dark:ring-zinc-900">
+                        <Navigation size={12} />
+                      </span>
+                      <h4 className="font-medium leading-tight dark:text-zinc-200">Start</h4>
+                      <p className="text-sm text-zinc-500">Vom Eingang geradeaus</p>
+                    </li>
+                    <li className="mb-2 ml-6">
+                      <span className="absolute flex items-center justify-center w-6 h-6 bg-orange-500 rounded-full -left-3 ring-4 ring-white dark:ring-zinc-900">
+                        <Target size={12} className="text-white" />
+                      </span>
+                      <h4 className="font-medium leading-tight dark:text-zinc-200">Ziel erreicht</h4>
+                      <p className="text-sm text-zinc-500">{destination.category}, Regal 4</p>
+                    </li>
+                  </ol>
+                </div>
               </div>
+            ) : (
+              <div className="text-center text-zinc-500 mt-10">Kein Ziel ausgewählt.</div>
+            )}
           </div>
         </div>
       </div>
