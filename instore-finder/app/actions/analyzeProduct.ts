@@ -3,7 +3,9 @@
 // Bitte eure API in die .env Datei eintragen damit ich damit kommunizieren kann.
 const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://127.0.0.1:8000';
 
-export default async function analyzeProductWithAI(formData: FormData) {
+
+// Konvertiert Base64 zu Binärdaten und streamt diese an Python.
+export async function analyzeProductWithAI(formData: FormData) {
   try {
     const imageFile = formData.get('image') as string; // Base64 String
     const textInput = formData.get('text') as string;

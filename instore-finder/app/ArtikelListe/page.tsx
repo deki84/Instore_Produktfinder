@@ -4,7 +4,7 @@ import { Camera, X, RefreshCw, Sparkles, ScanLine } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Webcam from 'react-webcam';
 import { saveImageToServer } from '../actions/saveImage';
-import  analyzeProductWithAI  from '../actions/analyzeProduct';
+import { analyzeProductWithAI } from '../actions/analyzeProduct';
 
 
 const WebcamComponent = Webcam as typeof Webcam;
@@ -35,12 +35,35 @@ export default function ArtikelForm() {
   };
 
   // Suche ausführen
-  const handleSearch = () => {
-    const params = new URLSearchParams();
-    if (formData.artikelnummer) params.set('id', formData.artikelnummer);
-    if (formData.title) params.set('titel', formData.title);
-    if (formData.beschreibung) params.set('desc', formData.beschreibung);
-    router.push(`/ProduktAuswahl/123${params.toString()}`);
+  const handleTextSearch = async () => {
+    setIsAnalyzing(true);
+    
+    try {
+      // 1. Daten für Server Action vorbereiten
+      const data_prep_server = new FormData();
+      // kombinieren alle Felder zu einem Suchstring für die KI
+      const queryText_for_AI = `${formData.title} ${formData.beschreibung} ${formData.artikelnummer}`.trim();
+      data_prep_server.append('text', queryText_for_AI);
+      
+      // 2. Server Action aufrufen
+      const result_from_AI = await analyzeProductWithAI(data_prep_server);
+      console.log("KI Text-Ergebnis:", result_from_AI);
+
+      // 3. Ergebnis auswerten und weiterleiten
+      // die KI gibt ein JSON zurück, z.B. { text: "Akkuschrauber", ... }
+      const searchParam_from_AI = result_from_AI?.text || result_from_AI?.prod_position || queryText_for_AI; 
+      
+      const paramString_from_URL = new URLSearchParams();
+      paramString_from_URL.set('q', searchParam_from_AI); // 'q' steht für Query
+      
+      router.push(`/ProduktAuswahl?${paramString_from_URL.toString()}`);
+
+    } catch (error) {
+      console.error("Fehler bei Text-Suche:", error);
+      router.push(`/ProduktAuswahl?q=${formData.title}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   // KAMERA LOGIK (Native HTML5)
@@ -91,12 +114,13 @@ export default function ArtikelForm() {
     };
   }, [showCamera, facingMode, startCamera]);
 
+  // Sendet das Base64 Bild an die Server Action analyzeProductWithAI.
   const capture = useCallback(async () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
-      // Canvas auf Video-Größe setzen
+      // Canvas auf Video-Größe...MEMO noch responsive machen
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       
@@ -106,40 +130,62 @@ export default function ArtikelForm() {
         const imageSrc = canvas.toDataURL('image/jpeg');
         
         if (imageSrc) {
-          stopCamera(); // Kamera stoppen
+          stopCamera();
           setIsAnalyzing(true);
           
-          await saveImageToServer(imageSrc);
-          console.log("Bild gespeichert.");
-          
-          // HIER KOMMT DIE KI AGENT LOGIK HIN  
-          // await analyzeImageWithAI(imageSrc);
-          await analyzeProductWithAI(new FormData()); // Platzhalter, hier müssten die echten Daten rein
-          
-          setIsAnalyzing(false);
+          try {
+            const saveResult = await saveImageToServer(imageSrc);
+            
+            if (saveResult.success && saveResult.url) {
+               const api_img_Data_To_AI = new FormData();
+               // WICHTIG FÜR BACKEND: Pfad relativ zu public machen oder absolut, je nach Python Setup
+               // Ich senden hier den Pfad, den 'saveImageToServer' zurückgibt 
+               // Das Python Script im gleichen Ordner muss diesen Pfad auflösen können.
+               // Hack für lokal: Wir nehmen an, Python läuft im Root und findet 'public/...'
+               api_img_Data_To_AI.append('filePath', `public${saveResult.url}`); //Bildpfad wird für Python vorbereitet. 
+               api_img_Data_To_AI.append('image', imageSrc); // Fallback für Base64 String
+
+               const ai_Result = await analyzeProductWithAI(api_img_Data_To_AI);
+               console.log("KI Bild-Ergebnis:", ai_Result);
+               
+               // FALLS die KI eine Beschreibung zurückgibt (kp "Weihnachtsbaum" oder "Hammer") sont wieder auskommentieren oder löschen
+               const detectedObject = ai_Result?.text || ai_Result?.prod_position || "Unbekanntes Objekt: Foto erneut machen oder Beschreibung hinzugefügt";
+               
+               const img_params_from_AI = new URLSearchParams();
+               img_params_from_AI.set('q', detectedObject); // Das erkannte Wort als Suchparameter
+               img_params_from_AI.set('source', 'camera');  // Info, dass es von der Kamera kam
+               
+               router.push(`/ProduktAuswahl?${img_params_from_AI.toString()}`);
+            }
+          } catch (e) {
+             console.error("Fehler:", e);
+             alert("Fehler bei der Analyse");
+          } finally {
+             setIsAnalyzing(false);
+          }
         }
       }
     }
-  }, [stopCamera]);
+  }, [stopCamera , router]);
 
   // Dummy-Funktion für den KI-Agenten
-  const analyzeImageWithAI = async (base64Image: string) => {
-    console.log("Sende Bild an KI...", base64Image.slice(0, 50) + "...");
+  // const analyzeImageWithAI = async (base64Image: string) => {
+  //   console.log("Sende Bild an KI...", base64Image.slice(0, 50) + "...");
     
-    // Simulation der Analysezeit 
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        setFormData(prev => ({
-          ...prev,
-          // Als werte müssen wir dann die Antwort der KI einfügen
-          artikelnummer: '47110815',
-          title: 'Bosch Akku-Schrauber IXO',
-          beschreibung: 'Kompakter Akkuschrauber, 3.6V, inkl. Bit-Set. Ideal für Möbelaufbau.'
-        }));
-        resolve();
-      }, 1500);
-    });
-  };
+  //   // Simulation der Analysezeit 
+  //   return new Promise<void>((resolve) => {
+  //     setTimeout(() => {
+  //       setFormData(prev => ({
+  //         ...prev,
+  //         // Als werte müssen wir dann die Antwort der KI einfügen
+  //         artikelnummer: '47110815',
+  //         title: 'Bosch Akku-Schrauber IXO',
+  //         beschreibung: 'Kompakter Akkuschrauber, 3.6V, inkl. Bit-Set. Ideal für Möbelaufbau.'
+  //       }));
+  //       resolve();
+  //     }, 1500);
+  //   });
+  // };
 
 
   // BILD RENDERN
@@ -280,7 +326,7 @@ export default function ArtikelForm() {
           </div>
 
       <button 
-        onClick={handleSearch}
+        onClick={handleTextSearch}
         className="w-full bg-gray-800 text-white py-4 rounded-lg font-medium hover:bg-gray-700 transition-colors"
       >
         Artikel suchen
