@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: instore-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    networks:
+      - instore-net
+
+  frontend:
+    build:
+      context: .                 
+      dockerfile: ./frontend/Dockerfile
+    container_name: instore-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+      - PYTHON_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - instore-net
+
+networks:
+  instore-net:
+    driver: bridge

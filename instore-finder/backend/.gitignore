@@ -52,4 +52,17 @@ node_modules/
 # Sonstiges
 .env
 .env.local
+dist/
 
+# VSCode / IDE
+.vscode/
+.idea/
+
+# Python / Jupyter
+.ipynb_checkpoints/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
