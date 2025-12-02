@@ -1,0 +1,54 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / Secrets
+.env
+.env.local
+.env.*.local
+.env.test
+.env*
+*.pem
+
+# Node / Next.js
+node_modules/
+**/node_modules/
+
+.next/
+**/.next/
+out/
+build/
+dist/
+coverage/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+*.log
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# Backend komplett aus Frontend-Build-Kontext raushalten
+backend/
+backend/.venv/
+backend/venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/htmlcov/
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+.cursor/

@@ -15,14 +15,14 @@ services:
 
   frontend:
     build:
-      context: .                 
+      context: .                     # WICHTIG: Projekt-Root
       dockerfile: ./frontend/Dockerfile
     container_name: instore-frontend
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
-      - PYTHON_API_URL=http://backend:8000
+     - NEXT_PUBLIC_API_BASE_URL=http://backend:8000
+     - PYTHON_API_URL=http://backend:8000
     depends_on:
       - backend
     networks:

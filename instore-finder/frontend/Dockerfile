@@ -1,10 +1,11 @@
-# frontend/Dockerfile
-FROM node:22-alpine
+FROM node:22
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+
+RUN rm -f package-lock.json \
+    && npm install
 
 COPY . .
 
