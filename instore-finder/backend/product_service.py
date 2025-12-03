@@ -6,59 +6,52 @@ from sklearn.neighbors import NearestNeighbors
 import joblib
 import re
 
-# neu: Import deiner Bild→Text Funktion
 from image_to_text_ionos import image_to_text
 
-
-# paths relative to this file
 BASE_DIR = Path(__file__).parent
 
 MODEL_PATH = BASE_DIR / "knn_model.joblib"
 EMB_PATH = BASE_DIR / "X_emb.npy"
 DATA_PATH = BASE_DIR / "products_clean.csv"
 
+SERVICE_READY = False
+
+df_prod: pd.DataFrame | None = None
+X_emb: np.ndarray | None = None
+knn: NearestNeighbors | None = None
+encoder: SentenceTransformer | None = None
 
 print("Lade Daten und Modell...")
 
-# 1) load product data
-df_prod = pd.read_csv(DATA_PATH, encoding="utf-8")
-df_prod["Art_Nr"] = df_prod["Art_Nr"].astype(str).str.strip()
+try:
+    df_prod = pd.read_csv(DATA_PATH, encoding="utf-8")
+    df_prod["Art_Nr"] = df_prod["Art_Nr"].astype(str).str.strip()
 
-print("Produkte geladen:", len(df_prod))
+    X_emb = np.load(EMB_PATH)
+    knn = joblib.load(MODEL_PATH)
+    encoder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
-# 2) load precomputed embeddings + knn
-X_emb = np.load(EMB_PATH)
-knn: NearestNeighbors = joblib.load(MODEL_PATH)
+    SERVICE_READY = True
+    print("Produkte geladen:", len(df_prod))
+    print("Service bereit.\n")
+except FileNotFoundError as e:
+    print("Daten oder Modell-Dateien fehlen:", e)
+    print("Service startet ohne Produktsuche.\n")
 
-# 3) encoder (FAST, no embedding recomputation!)
-encoder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-
-print("Service bereit.\n")
-
-
-# ---------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------
 
 def decode_lagerplatz(lp: str) -> str:
     try:
         sektor, gang, regal, fach = lp.split("-")
         return f"Sektor {sektor}, Gang {gang}, Regal {regal}, Fach {fach}"
-    except:
+    except Exception:
         return f"Lagerplatz {lp}"
 
 
 def predict_candidates(text: str, top_k: int = 5, search_k: int | None = None):
-    """
-    Find up to `top_k` candidates with UNIQUE Art_Nr.
+    if not SERVICE_READY or df_prod is None or knn is None or encoder is None:
+        return []
 
-    We query more neighbors (search_k) and then filter duplicates
-    by Art_Nr, because the same article can appear multiple times
-    in the CSV.
-    """
-    # how many neighbors to ask from KNN in total
     if search_k is None:
-        # you can tune this factor; 30 is usually enough
         search_k = max(top_k * 6, top_k)
 
     q_emb = encoder.encode([text], convert_to_numpy=True)
@@ -74,7 +67,6 @@ def predict_candidates(text: str, top_k: int = 5, search_k: int | None = None):
         row = df_prod.iloc[idx]
         artnr = str(row["Art_Nr"]).strip()
 
-        # skip duplicates
         if artnr in seen_artnr:
             continue
 
@@ -96,28 +88,23 @@ def predict_candidates(text: str, top_k: int = 5, search_k: int | None = None):
     return results
 
 
-
-# ---------------------------------------------------------
-# Main answer function (Text / Artikelnummer)
-# ---------------------------------------------------------
-
 def answer_query(user_text: str, min_sim: float = 0.4) -> str:
+    if not SERVICE_READY or df_prod is None:
+        return "Der Produktservice ist noch nicht konfiguriert (Daten oder Modelle fehlen auf dem Server)."
+
     user_text = user_text.strip()
 
-    # 1. Artikelnummer im Text erkennen (egal wo)
     m = re.search(r"\b\d{3,}\b", user_text)
     if m:
         artnr = m.group(0)
 
-        # Exists?
         if artnr not in df_prod["Art_Nr"].values:
             return (
                 f"Wir haben alles durchsucht, "
-                f"... aber leider konnten wir keinen passenden Treffer "
+                f"aber leider konnten wir keinen passenden Treffer "
                 f"für die Artikelnummer {artnr} finden."
             )
 
-        # Exists → return real product
         row = df_prod[df_prod["Art_Nr"] == artnr].iloc[0]
         loc = decode_lagerplatz(row["Lagerplatz"])
         return (
@@ -125,8 +112,10 @@ def answer_query(user_text: str, min_sim: float = 0.4) -> str:
             f"mit der Nummer {row['Art_Nr']} befindet sich bei {loc}."
         )
 
-    # 2. Keine Nummer → SEMANTISCHER KNN
     candidates = predict_candidates(user_text, top_k=5)
+    if not candidates:
+        return "Ich konnte keine passenden Artikel finden."
+
     best = candidates[0]
 
     if best["similarity"] < min_sim:
@@ -141,17 +130,10 @@ def answer_query(user_text: str, min_sim: float = 0.4) -> str:
     )
 
 
-
-# ---------------------------------------------------------
-# Image → Text → KNN
-# ---------------------------------------------------------
-
 def answer_from_image(image_path: str, min_sim: float = 0.4) -> str:
-    """
-    1. Holt eine Textbeschreibung vom Bild (IONOS Vision Modell).
-    2. Nutzt dieselbe semantische Suche wie bei Textfragen.
-    3. Gibt die TOP-5 Kandidaten zurück.
-    """
+    if not SERVICE_READY:
+        return "Der Bildservice ist noch nicht konfiguriert (Daten oder Modelle fehlen auf dem Server)."
+
     try:
         caption = image_to_text(image_path).strip()
     except Exception as e:
@@ -162,7 +144,6 @@ def answer_from_image(image_path: str, min_sim: float = 0.4) -> str:
 
     print(f"[Debug] Bildbeschreibung: {caption}")
 
-    # Top-5 Kandidaten holen
     candidates = predict_candidates(caption, top_k=5)
     if not candidates:
         return "Ich konnte keinen passenden Artikel zum Bild finden."
@@ -193,10 +174,6 @@ def answer_from_image(image_path: str, min_sim: float = 0.4) -> str:
 
     return "\n".join(lines)
 
-
-# ---------------------------------------------------------
-# CLI test mode: Text ODER Bild
-# ---------------------------------------------------------
 
 if __name__ == "__main__":
     print("Produkt Service gestartet.")
