@@ -1,41 +1,44 @@
-from pathlib import Path
-import numpy as np
+import os
+import requests
 import pandas as pd
-from sentence_transformers import SentenceTransformer
-from sklearn.neighbors import NearestNeighbors
-import joblib
 import re
 
 from image_to_text_ionos import image_to_text
 
-BASE_DIR = Path(__file__).parent
-
-MODEL_PATH = BASE_DIR / "knn_model.joblib"
-EMB_PATH = BASE_DIR / "X_emb.npy"
-DATA_PATH = BASE_DIR / "products_clean.csv"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
 SERVICE_READY = False
-
 df_prod: pd.DataFrame | None = None
-X_emb: np.ndarray | None = None
-knn: NearestNeighbors | None = None
-encoder: SentenceTransformer | None = None
 
-print("Lade Daten und Modell...")
+print("Lade Produktdaten aus Supabase...")
+
+
+def load_products_from_supabase() -> pd.DataFrame:
+    url = f"{SUPABASE_URL}/rest/v1/products"
+    params = {
+        "select": "Art_Nr,Art_Bezeichnung,Lagerplatz",
+        "limit": 10000,
+    }
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    }
+    resp = requests.get(url, params=params, headers=headers, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    df = pd.DataFrame(data)
+    df["Art_Nr"] = df["Art_Nr"].astype(str).str.strip()
+    return df
+
 
 try:
-    df_prod = pd.read_csv(DATA_PATH, encoding="utf-8")
-    df_prod["Art_Nr"] = df_prod["Art_Nr"].astype(str).str.strip()
-
-    X_emb = np.load(EMB_PATH)
-    knn = joblib.load(MODEL_PATH)
-    encoder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-
+    df_prod = load_products_from_supabase()
     SERVICE_READY = True
     print("Produkte geladen:", len(df_prod))
     print("Service bereit.\n")
-except FileNotFoundError as e:
-    print("Daten oder Modell-Dateien fehlen:", e)
+except Exception as e:
+    print("Fehler beim Laden aus Supabase:", e)
     print("Service startet ohne Produktsuche.\n")
 
 
@@ -47,52 +50,49 @@ def decode_lagerplatz(lp: str) -> str:
         return f"Lagerplatz {lp}"
 
 
-def predict_candidates(text: str, top_k: int = 5, search_k: int | None = None):
-    if not SERVICE_READY or df_prod is None or knn is None or encoder is None:
+def simple_search(query: str, limit: int = 5):
+    if not SERVICE_READY or df_prod is None:
         return []
 
-    if search_k is None:
-        search_k = max(top_k * 6, top_k)
+    q = query.lower().strip()
+    if not q:
+        return []
 
-    q_emb = encoder.encode([text], convert_to_numpy=True)
+    words = [w for w in re.findall(r"\w+", q) if len(w) > 2]
 
-    distances, indices = knn.kneighbors(q_emb, n_neighbors=search_k)
-    distances = distances[0]
-    indices = indices[0]
+    def score_row(text: str) -> int:
+        t = str(text).lower()
+        return sum(1 for w in words if w in t)
+
+    scores = df_prod["Art_Bezeichnung"].apply(score_row)
+    df_scored = df_prod.copy()
+    df_scored["score"] = scores
+
+    df_best = df_scored[df_scored["score"] > 0].sort_values(
+        by="score", ascending=False
+    ).head(limit)
 
     results = []
-    seen_artnr = set()
-
-    for d, idx in zip(distances, indices):
-        row = df_prod.iloc[idx]
-        artnr = str(row["Art_Nr"]).strip()
-
-        if artnr in seen_artnr:
-            continue
-
-        seen_artnr.add(artnr)
-        sim = 1 - d
-
+    for _, row in df_best.iterrows():
         results.append(
             {
-                "Art_Nr": artnr,
+                "Art_Nr": str(row["Art_Nr"]).strip(),
                 "Art_Bezeichnung": row["Art_Bezeichnung"],
-                "Lagerplatz": row["Lagerplatz"],
-                "similarity": float(sim),
+                "Lagerplatz": row.get("Lagerplatz", ""),
+                "score": int(row["score"]),
             }
         )
-
-        if len(results) >= top_k:
-            break
 
     return results
 
 
-def answer_query(user_text: str, min_sim: float = 0.4) -> str:
+def answer_query(user_text: str) -> str:
     if not SERVICE_READY or df_prod is None:
-        return "Der Produktservice ist noch nicht konfiguriert (Daten oder Modelle fehlen auf dem Server)."
+        return "Der Produktservice ist noch nicht konfiguriert (Produktdaten fehlen)."
 
     user_text = user_text.strip()
+    if not user_text:
+        return "Bitte geben Sie eine Beschreibung oder Artikelnummer ein."
 
     m = re.search(r"\b\d{3,}\b", user_text)
     if m:
@@ -101,38 +101,45 @@ def answer_query(user_text: str, min_sim: float = 0.4) -> str:
         if artnr not in df_prod["Art_Nr"].values:
             return (
                 f"Wir haben alles durchsucht, "
-                f"aber leider konnten wir keinen passenden Treffer "
-                f"für die Artikelnummer {artnr} finden."
+                f"aber leider keinen passenden Treffer "
+                f"für die Artikelnummer {artnr} gefunden."
             )
 
         row = df_prod[df_prod["Art_Nr"] == artnr].iloc[0]
-        loc = decode_lagerplatz(row["Lagerplatz"])
+        loc = decode_lagerplatz(row.get("Lagerplatz", ""))
         return (
             f"Der Artikel '{row['Art_Bezeichnung']}' "
             f"mit der Nummer {row['Art_Nr']} befindet sich bei {loc}."
         )
 
-    candidates = predict_candidates(user_text, top_k=5)
+    candidates = simple_search(user_text, limit=5)
     if not candidates:
         return "Ich konnte keine passenden Artikel finden."
 
     best = candidates[0]
+    loc = decode_lagerplatz(best.get("Lagerplatz", ""))
 
-    if best["similarity"] < min_sim:
-        return "Ich bin mir nicht sicher, bitte beschreiben Sie das Produkt genauer."
-
-    loc = decode_lagerplatz(best["Lagerplatz"])
-    return (
+    lines = []
+    lines.append(
         f"Ich vermute, Sie meinen den Artikel '{best['Art_Bezeichnung']}' "
-        f"(Art.-Nr. {best['Art_Nr']}).\n"
-        f"Er befindet sich bei {loc}.\n"
-        f"(Ähnlichkeit/Score: {best['similarity']:.2f})"
+        f"(Art.-Nr. {best['Art_Nr']})."
     )
+    lines.append(f"Er befindet sich bei {loc}.")
+    lines.append("")
+    lines.append("Weitere mögliche Treffer:")
+
+    for c in candidates[1:]:
+        loc_c = decode_lagerplatz(c.get("Lagerplatz", ""))
+        lines.append(
+            f"- {c['Art_Bezeichnung']} (Art.-Nr. {c['Art_Nr']}), {loc_c}"
+        )
+
+    return "\n".join(lines)
 
 
-def answer_from_image(image_path: str, min_sim: float = 0.4) -> str:
-    if not SERVICE_READY:
-        return "Der Bildservice ist noch nicht konfiguriert (Daten oder Modelle fehlen auf dem Server)."
+def answer_from_image(image_path: str) -> str:
+    if not SERVICE_READY or df_prod is None:
+        return "Der Bildservice ist noch nicht konfiguriert (Produktdaten fehlen)."
 
     try:
         caption = image_to_text(image_path).strip()
@@ -144,32 +151,20 @@ def answer_from_image(image_path: str, min_sim: float = 0.4) -> str:
 
     print(f"[Debug] Bildbeschreibung: {caption}")
 
-    candidates = predict_candidates(caption, top_k=5)
+    candidates = simple_search(caption, limit=5)
     if not candidates:
         return "Ich konnte keinen passenden Artikel zum Bild finden."
-
-    best = candidates[0]
-    best_sim = best["similarity"]
 
     lines = []
     lines.append(f"Bildbeschreibung: {caption}")
     lines.append("")
-
-    if best_sim < min_sim:
-        lines.append(
-            "Achtung: Die Erkennung ist unsicher, hier sind trotzdem die 5 wahrscheinlichsten Artikel:"
-        )
-    else:
-        lines.append("Hier sind die 5 wahrscheinlichsten Artikel zum Bild:")
-
-    lines.append("")
+    lines.append("Mögliche Artikel:")
 
     for i, c in enumerate(candidates, start=1):
-        loc = decode_lagerplatz(c["Lagerplatz"])
+        loc = decode_lagerplatz(c.get("Lagerplatz", ""))
         lines.append(
             f"{i}. {c['Art_Bezeichnung']} "
-            f"(Art.-Nr. {c['Art_Nr']}), {loc} "
-            f"(Score: {c['similarity']:.2f})"
+            f"(Art.-Nr. {c['Art_Nr']}), {loc}"
         )
 
     return "\n".join(lines)
@@ -202,3 +197,9 @@ if __name__ == "__main__":
 
         else:
             print("Bitte 't' für Text, 'b' für Bild oder 'exit' zum Beenden.\n")
+
+
+
+
+
+

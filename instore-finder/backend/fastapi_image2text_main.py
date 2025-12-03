@@ -4,6 +4,7 @@ import mimetypes
 import requests
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from product_service import answer_query, answer_from_image
@@ -26,6 +27,15 @@ HEADERS = {
 }
 
 app = FastAPI(title="Image/Text → ProdId (IONOS + Mistral)")
+
+# Allow Next.js app (http://localhost:3000) to call this API from the browser
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def _data_uri_from_bytes(content: bytes, filename: str | None, content_type: str | None) -> str:
     """Build a data: URI for the uploaded image."""
