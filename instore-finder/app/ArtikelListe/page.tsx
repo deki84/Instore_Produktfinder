@@ -1,13 +1,11 @@
 "use client";
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Camera, X, RefreshCw, Sparkles, ScanLine } from 'lucide-react';
+import { Camera, X, RefreshCw, Sparkles, ScanLine, MapPin, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import Webcam from 'react-webcam';
-import { saveImageToServer } from '../actions/saveImage';
-import  analyzeProductWithAI  from '../actions/analyzeProduct';
 
 
-const WebcamComponent = Webcam as typeof Webcam;
+
+
 
 export default function ArtikelForm() {
   const router = useRouter();
@@ -20,6 +18,24 @@ export default function ArtikelForm() {
 
   const [showCamera, setShowCamera] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  interface ProductResult {
+    Art_Nr: string;
+    Art_Bezeichnung: string;
+    Lagerplatz: string;
+    Lagerplatz_decoded: string;
+    obi_image_url: string | null;
+    Verpackung_Groesse: string | null;
+    score: number;
+  }
+
+  interface ImageSearchResponse {
+    caption: string;
+    products: ProductResult[];
+    error: string | null;
+  }
+
+  const [imageSearchResults, setImageSearchResults] = useState<ImageSearchResponse | null>(null);
   
   // Native Video Refs statt react-webcam
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -40,7 +56,8 @@ export default function ArtikelForm() {
     if (formData.artikelnummer) params.set('id', formData.artikelnummer);
     if (formData.title) params.set('titel', formData.title);
     if (formData.beschreibung) params.set('desc', formData.beschreibung);
-    router.push(`/ProduktAuswahl/123${params.toString()}`);
+    // Route-ID wird nicht verwendet, aber Next.js erfordert sie aufgrund der [id] Struktur
+    router.push(`/ProduktAuswahl/search?${params.toString()}`);
   };
 
   // KAMERA LOGIK (Native HTML5)
@@ -92,35 +109,116 @@ export default function ArtikelForm() {
   }, [showCamera, facingMode, startCamera]);
 
   const capture = useCallback(async () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      // Canvas auf Video-Größe setzen
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      const context = canvas.getContext('2d');
-      if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageSrc = canvas.toDataURL('image/jpeg');
-        
-        if (imageSrc) {
-          stopCamera(); // Kamera stoppen
-          setIsAnalyzing(true);
-          
-          await saveImageToServer(imageSrc);
-          console.log("Bild gespeichert.");
-          
-          // HIER KOMMT DIE KI AGENT LOGIK HIN  
-          // await analyzeImageWithAI(imageSrc);
-          await analyzeProductWithAI(new FormData()); // Platzhalter, hier müssten die echten Daten rein
-          
-          setIsAnalyzing(false);
-        }
-      }
+    console.log('capture clicked');
+
+    if (!videoRef.current || !canvasRef.current) {
+      console.warn('No video or canvas ref');
+      return;
     }
-  }, [stopCamera]);
+  
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+  
+    // Ensure the video has dimensions (metadata loaded)
+    if (!video.videoWidth || !video.videoHeight) {
+      console.warn('Video not ready yet (no dimensions). Try again in a second.');
+      return;
+    }
+  
+    // 1) Draw current frame to canvas
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+  
+    const context = canvas.getContext('2d');
+    if (!context) {
+      console.warn('No 2D context on canvas');
+      return;
+    }
+  
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    console.log('Frame drawn to canvas');
+  
+    // 2) Convert canvas to Blob
+    canvas.toBlob(async (blob) => {
+      console.log('toBlob callback fired, blob =', blob);
+      if (!blob) {
+        console.error('Blob is null – no image data');
+        return;
+      }
+  
+      try {
+        stopCamera();
+        setIsAnalyzing(true);
+  
+        // 3) Build FormData for FastAPI (UploadFile "file")
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', blob, 'camera.jpg');
+        formDataUpload.append('structured', 'true'); // Request structured data
+  
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+        console.log('Using API base URL:', baseUrl);
+        if (!baseUrl) {
+          throw new Error('NEXT_PUBLIC_API_BASE_URL is not set');
+        }
+  
+        // 4) Call Python /image_to_prod_id with structured=true
+        console.log('Sending request to', `${baseUrl}/image_to_prod_id`);
+        const res = await fetch(`${baseUrl}/image_to_prod_id`, {
+          method: 'POST',
+          body: formDataUpload, // Content-Type must NOT be set manually
+        });
+  
+        console.log('Response status:', res.status);
+        if (!res.ok) {
+          const text = await res.text();
+          console.error('Backend error body:', text);
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        const data = await res.json();
+        console.log("Backend JSON:", data);
+
+        // 4) Handle structured product data from backend
+        if (data.products && Array.isArray(data.products)) {
+          setImageSearchResults(data);
+
+          if (data.products.length > 0) {
+            const firstProduct = data.products[0];
+            setFormData((prev) => ({
+              ...prev,
+              artikelnummer: firstProduct.Art_Nr || "",
+              beschreibung: data.caption || "",
+            }));
+          }
+
+          // Success message after AI finished analysis
+          setStatusMessage(
+            "Die KI hat passende Artikel gefunden. Bitte einen Artikel auswählen."
+          );
+        } else {
+          // Fallback: plain text response prod_position
+          setImageSearchResults(null);
+          setFormData((prev) => ({
+            ...prev,
+            beschreibung: data.prod_position ?? "Kein Ergebnis erhalten",
+          }));
+          setStatusMessage(
+            "Die KI konnte keinen passenden Artikel erkennen."
+          );
+        }
+      } catch (err) {
+        console.error("Image analyze error:", err);
+        alert("Fehler bei der Bildanalyse. Details in der Konsole.");
+        // Error message if AI request fails
+        setStatusMessage("Fehler bei der Bildanalyse. Bitte erneut versuchen.");
+      } finally {
+        setIsAnalyzing(false);
+      }
+    },
+    "image/jpeg"
+  );
+}, [stopCamera]);
+  
 
   // Dummy-Funktion für den KI-Agenten
   const analyzeImageWithAI = async (base64Image: string) => {
@@ -286,6 +384,87 @@ export default function ArtikelForm() {
         Artikel suchen
       </button>
     </div>
+
+        {/* --- PRODUKTKARTEN NACH BILDAUFNAHME --- */}
+        {imageSearchResults && imageSearchResults.products && imageSearchResults.products.length > 0 && (
+          <div className="mt-6 bg-white rounded-3xl shadow-xl border border-zinc-100 overflow-hidden p-6">
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-zinc-900 mb-2">Gefundene Produkte</h2>
+              {imageSearchResults.caption && (
+                <p className="text-sm text-zinc-500 italic">
+                  &ldquo;{imageSearchResults.caption}&rdquo;
+                </p>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-1 gap-4">
+              {imageSearchResults.products.map((product: ProductResult, index: number) => (
+                <div
+                  key={product.Art_Nr || index}
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    params.set('id', product.Art_Nr);
+                    router.push(`/ProduktAuswahl/search?${params.toString()}`);
+                  }}
+                  className="bg-zinc-50 rounded-xl border border-zinc-200 hover:border-orange-500 hover:shadow-lg transition-all cursor-pointer overflow-hidden group"
+                >
+                  <div className="flex gap-4 p-4">
+                    {/* Produktbild */}
+                    <div className="w-24 h-24 flex-shrink-0 bg-white rounded-lg border border-zinc-200 overflow-hidden flex items-center justify-center">
+                      {product.obi_image_url ? (
+                        <img
+                          src={product.obi_image_url}
+                          alt={product.Art_Bezeichnung}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <div className={`${product.obi_image_url ? 'hidden' : ''} text-zinc-300`}>
+                        <ImageIcon size={32} />
+                      </div>
+                    </div>
+
+                    {/* Produktinfo */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-zinc-900 mb-1 line-clamp-2 group-hover:text-orange-500 transition-colors">
+                        {product.Art_Bezeichnung}
+                      </h3>
+                      <p className="text-xs text-zinc-500 mb-2">
+                        Art.-Nr.: {product.Art_Nr}
+                      </p>
+                      {product.Lagerplatz_decoded && (
+                        <div className="flex items-center gap-1 text-xs text-green-600 mb-2">
+                          <MapPin size={12} />
+                          <span>{product.Lagerplatz_decoded}</span>
+                        </div>
+                      )}
+                      {product.Verpackung_Groesse && (
+                        <p className="text-xs text-zinc-400">
+                          {product.Verpackung_Groesse}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Pfeil */}
+                    <div className="flex items-center">
+                      <ChevronRight size={20} className="text-zinc-400 group-hover:text-orange-500 transition-colors" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setImageSearchResults(null)}
+              className="mt-4 w-full text-sm text-zinc-500 hover:text-zinc-700 transition-colors"
+            >
+              Ergebnisse ausblenden
+            </button>
+          </div>
+        )}
 
     </div>
 
