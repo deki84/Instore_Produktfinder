@@ -20,6 +20,9 @@ def load_products_from_supabase() -> pd.DataFrame:
     Load product rows from Supabase 'products' table into a DataFrame.
     Also includes the 'obi_image_url' column for frontend images.
     """
+    print("SUPABASE_URL:", SUPABASE_URL)
+    print("SUPABASE_SERVICE_KEY gesetzt:", bool(SUPABASE_KEY))  # True/False
+
     url = f"{SUPABASE_URL}/rest/v1/products"
     params = {
         "select": "Art_Nr,Art_Bezeichnung,Lagerplatz,obi_image_url,Verpackung_Groesse,train_text",
@@ -29,7 +32,10 @@ def load_products_from_supabase() -> pd.DataFrame:
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
     }
+    print("Rufe Supabase URL auf:", url)
     resp = requests.get(url, params=params, headers=headers, timeout=30)
+    print("Supabase Status-Code:", resp.status_code)
+    print("Supabase Antwort (erste 300 Zeichen):", resp.text[:300])
     resp.raise_for_status()
     data = resp.json()
     df = pd.DataFrame(data)
