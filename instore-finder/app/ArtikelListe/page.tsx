@@ -24,7 +24,7 @@ export default function ArtikelForm() {
     Art_Bezeichnung: string;
     Lagerplatz: string;
     Lagerplatz_decoded: string;
-    obi_image_url: string | null;
+    obi_image_url?: string | null;
     Verpackung_Groesse: string | null;
     score: number;
   }
@@ -410,23 +410,21 @@ export default function ArtikelForm() {
                 >
                   <div className="flex gap-4 p-4">
                     {/* Produktbild */}
-                    <div className="w-24 h-24 flex-shrink-0 bg-white rounded-lg border border-zinc-200 overflow-hidden flex items-center justify-center">
-                      {product.obi_image_url ? (
-                        <img
-                          src={product.obi_image_url}
-                          alt={product.Art_Bezeichnung}
-                          className="w-full h-full object-contain"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                          }}
-                        />
-                      ) : null}
-                      <div className={`${product.obi_image_url ? 'hidden' : ''} text-zinc-300`}>
-                        <ImageIcon size={32} />
-                      </div>
-                    </div>
-
+                    <div className="w-24 h-24 flex-shrink-0 bg-white rounded-lg border border-zinc-200 overflow-hidden flex items-center justify-center">                    
+             {product.obi_image_url ? ( <img
+           src={product.obi_image_url}
+          alt={product.Art_Bezeichnung}
+           className="w-full h-full object-contain"
+            onError={(e) => {
+             (e.target as HTMLImageElement).style.display = 'none';
+             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+           }}
+          />
+        ) : null}
+       <div className={`${product.obi_image_url ? 'hidden' : ''} text-zinc-300`}>
+        <ImageIcon size={32} />
+      </div>
+     </div>
                     {/* Produktinfo */}
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-zinc-900 mb-1 line-clamp-2 group-hover:text-orange-500 transition-colors">

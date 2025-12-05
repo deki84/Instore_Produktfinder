@@ -12,7 +12,7 @@ from product_service import answer_query, answer_from_image, answer_from_image_s
 load_dotenv()
 
 OPENAI_API_TOKEN = os.getenv("OPENAI_API_TOKEN")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL","https://test-jena-openai.openai.azure.com/openai/v1/chat/completions")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL","https://test-jena-openai.openai.azure.com/openai/v1")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "30"))
 VERIFY_SSL = os.getenv("VERIFY_SSL", "true").lower() == "true"
