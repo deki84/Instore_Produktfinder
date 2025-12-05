@@ -64,7 +64,7 @@ def decode_lagerplatz(lp: str) -> str:
     except Exception:
         return f"Lagerplatz {lp}"
 
-TOPWORDS = {
+STOPWORDS = {
    "das", "bild", "zeigt", "eine", "einen", "der", "die", "den",
    "ist", "im", "vom", "mit", "und", "oder", "einem", "einer",
    "hand", "hintergrund"   
