@@ -4,10 +4,7 @@ Thumbs.db
 
 # Env / Secrets
 .env
-.env.local
-.env.*.local
 .env.test
-.env*
 *.pem
 
 # Node / Next.js
