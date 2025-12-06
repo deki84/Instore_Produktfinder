@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 
 export default function ArtikelForm() {
   const router = useRouter();
-  
+
   const [formData, setFormData] = useState({
     artikelnummer: '',
     title: '',
@@ -36,12 +36,12 @@ export default function ArtikelForm() {
   }
 
   const [imageSearchResults, setImageSearchResults] = useState<ImageSearchResponse | null>(null);
-  
+
   // Native Video Refs statt react-webcam
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  
+
   // State für Kamera-Wechsel (Front/Back)
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
 
@@ -57,7 +57,7 @@ export default function ArtikelForm() {
     if (formData.title) params.set('titel', formData.title);
     if (formData.beschreibung) params.set('desc', formData.beschreibung);
     // Route-ID wird nicht verwendet, aber Next.js erfordert sie aufgrund der [id] Struktur
-    router.push(`/ProduktAuswahl/search?${params.toString()}`);
+    router.push(`/ProduktAuswahl/search?${ params.toString() }`);
   };
 
   // KAMERA LOGIK (Native HTML5)
@@ -116,30 +116,30 @@ export default function ArtikelForm() {
       console.warn('No video or canvas ref');
       return;
     }
-  
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
-  
+
     // Ensure the video has dimensions (metadata loaded)
     if (!video.videoWidth || !video.videoHeight) {
       console.warn('Video not ready yet (no dimensions). Try again in a second.');
       return;
     }
-  
+
     // 1) Draw current frame to canvas
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-  
+
     const context = canvas.getContext('2d');
     if (!context) {
       console.warn('No 2D context on canvas');
       return;
     }
-  
+
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     console.log('Frame drawn to canvas');
-  
+
     // 2) Convert canvas to Blob
     canvas.toBlob(async (blob) => {
       console.log('toBlob callback fired, blob =', blob);
@@ -147,34 +147,34 @@ export default function ArtikelForm() {
         console.error('Blob is null – no image data');
         return;
       }
-  
+
       try {
         stopCamera();
         setIsAnalyzing(true);
-  
+
         // 3) Build FormData for FastAPI (UploadFile "file")
         const formDataUpload = new FormData();
         formDataUpload.append('file', blob, 'camera.jpg');
         formDataUpload.append('structured', 'true'); // Request structured data
-  
+
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
         console.log('Using API base URL:', baseUrl);
         if (!baseUrl) {
           throw new Error('NEXT_PUBLIC_API_BASE_URL is not set');
         }
-  
+
         // 4) Call Python /image_to_prod_id with structured=true
-        console.log('Sending request to', `${baseUrl}/image_to_prod_id`);
-        const res = await fetch(`${baseUrl}/image_to_prod_id`, {
+        console.log('Sending request to', `${ baseUrl }/image_to_prod_id`);
+        const res = await fetch(`${ baseUrl }/image_to_prod_id`, {
           method: 'POST',
           body: formDataUpload, // Content-Type must NOT be set manually
         });
-  
+
         console.log('Response status:', res.status);
         if (!res.ok) {
           const text = await res.text();
           console.error('Backend error body:', text);
-          throw new Error(`HTTP ${res.status}: ${text}`);
+          throw new Error(`HTTP ${ res.status }: ${ text }`);
         }
         const data = await res.json();
         console.log("Backend JSON:", data);
@@ -216,15 +216,15 @@ export default function ArtikelForm() {
         setIsAnalyzing(false);
       }
     },
-    "image/jpeg"
-  );
-}, [stopCamera]);
-  
+      "image/jpeg"
+    );
+  }, [stopCamera]);
+
 
   // Dummy-Funktion für den KI-Agenten
   // const analyzeImageWithAI = async (base64Image: string) => {
   //   console.log("Sende Bild an KI...", base64Image.slice(0, 50) + "...");
-    
+
   //   // Simulation der Analysezeit 
   //   return new Promise<void>((resolve) => {
   //     setTimeout(() => {
@@ -244,22 +244,35 @@ export default function ArtikelForm() {
   // BILD RENDERN
   return (
     <div className="min-h-screen bg-zinc-50 font-sans text-zinc-800 pb-10">
-      
 
-      <div className="bg-orange-500 pt-12 pb-8 px-6 shadow-lg rounded-b-[2.5rem]">
-        <div className="max-w-md mx-auto">
-            <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
-              OBI <span className="font-normal text-orange-100">Produkt-Finder</span>
-            </h1>
-            <p className="text-orange-50 font-medium flex items-center gap-2">
-              <Sparkles size={16} />
-              KI-gestützte Artikelsuche
-            </p>
+
+      <div className="bg-orange-500 pt-12 pb-8 px-6 md:px-8 md:pt-16 md:pb-12 shadow-lg rounded-b-[2.5rem] md:rounded-b-[3.5rem]">
+
+        {/* CONTAINER */}
+        {/* Wichtigste Änderung: max-w-md ist der Standard (Mobile), ab Tablet (md:) wird es breiter (max-w-3xl) */}
+        <div className="w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto">
+
+          {/* TITEL & SUBTITEL */}
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
+            <div>
+              {/* Schriftgröße wächst auf Tablets (md:text-4xl) */}
+              <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-2">
+                OBI <span className="font-normal text-orange-100">Produkt-Finder</span>
+              </h1>
+
+              <p className="text-orange-50 font-medium flex items-center gap-2 text-sm md:text-base">
+                <Sparkles size={16} className="md:w-5 md:h-5" /> {/* Icon wächst leicht mit */}
+                KI-gestützte Artikelsuche
+              </p>
+            </div>
+
+            {/* Optional: Auf Tablets könnte hier rechts noch etwas stehen (z.B. User Icon), 
+                deshalb habe ich oben flex-row hinzugefügt */}
+          </div>
         </div>
       </div>
+      <div className="w-full max-w-md md:max-w-3xl lg:max-w-5xl mx-auto px-4 md:px-8 -mt-6 md:-mt-10 relative z-10">
 
-      <div className="max-w-md mx-auto px-4 -mt-6">
-        
         {/* --- CAMERA OVERLAY --- */}
         {showCamera && (
           <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between animate-in fade-in duration-300">
@@ -276,28 +289,28 @@ export default function ArtikelForm() {
 
 
             <div className="flex-grow flex items-center justify-center bg-black relative overflow-hidden">
-               <video 
-                 ref={videoRef}
-                 autoPlay 
-                 playsInline 
-                 muted
-                 className="w-full h-full object-cover" 
-               />
-               {/* Hidden Canvas for Capture */}
-               <canvas ref={canvasRef} className="hidden" />
-               
-               {/* Scan Frame Overlay Visual */}
-               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-64 h-64 border-2 border-white/50 rounded-3xl relative">
-                    <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-orange-500 -mt-1 -ml-1 rounded-tl-lg"></div>
-                    <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-orange-500 -mt-1 -mr-1 rounded-tr-lg"></div>
-                    <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-orange-500 -mb-1 -ml-1 rounded-bl-lg"></div>
-                    <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-orange-500 -mb-1 -mr-1 rounded-br-lg"></div>
-                  </div>
-               </div>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              {/* Hidden Canvas for Capture */}
+              <canvas ref={canvasRef} className="hidden" />
+
+              {/* Scan Frame Overlay Visual */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-64 h-64 border-2 border-white/50 rounded-3xl relative">
+                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-orange-500 -mt-1 -ml-1 rounded-tl-lg"></div>
+                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-orange-500 -mt-1 -mr-1 rounded-tr-lg"></div>
+                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-orange-500 -mb-1 -ml-1 rounded-bl-lg"></div>
+                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-orange-500 -mb-1 -mr-1 rounded-br-lg"></div>
+                </div>
+              </div>
             </div>
             <div className="p-10 flex justify-center items-center bg-gradient-to-t from-black/80 to-transparent absolute bottom-0 w-full">
-              <button 
+              <button
                 onClick={capture}
                 className="w-20 h-20 rounded-full border-4 border-white bg-orange-500 hover:scale-105 hover:bg-orange-400 transition-all shadow-xl ring-4 ring-white/20"
               />
@@ -317,7 +330,7 @@ export default function ArtikelForm() {
         <div className="bg-white rounded-3xl shadow-xl border border-zinc-100 overflow-hidden p-6 sm:p-8">
           <div className="mb-8">
             <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Schnellsuche</label>
-            <button 
+            <button
               onClick={() => setShowCamera(true)}
               className="w-full group relative overflow-hidden rounded-2xl bg-zinc-50 border-2 border-dashed border-zinc-300 hover:border-orange-500 hover:bg-orange-50 transition-all duration-300 p-6 text-center cursor-pointer"
             >
@@ -378,13 +391,13 @@ export default function ArtikelForm() {
             </div>
           </div>
 
-      <button 
-        onClick={handleTextSearch}
-        className="w-full bg-gray-800 text-white py-4 rounded-lg font-medium hover:bg-gray-700 transition-colors"
-      >
-        Artikel suchen
-      </button>
-    </div>
+          <button
+            onClick={handleSearch}
+            className="w-full bg-gray-800 text-white py-4 rounded-lg font-medium hover:bg-gray-700 transition-colors"
+          >
+            Artikel suchen
+          </button>
+        </div>
 
         {/* --- PRODUKTKARTEN NACH BILDAUFNAHME --- */}
         {imageSearchResults && imageSearchResults.products && imageSearchResults.products.length > 0 && (
@@ -397,7 +410,7 @@ export default function ArtikelForm() {
                 </p>
               )}
             </div>
-            
+
             <div className="grid grid-cols-1 gap-4">
               {imageSearchResults.products.map((product: ProductResult, index: number) => (
                 <div
@@ -405,27 +418,27 @@ export default function ArtikelForm() {
                   onClick={() => {
                     const params = new URLSearchParams();
                     params.set('id', product.Art_Nr);
-                    router.push(`/ProduktAuswahl/search?${params.toString()}`);
+                    router.push(`/ProduktAuswahl/search?${ params.toString() }`);
                   }}
                   className="bg-zinc-50 rounded-xl border border-zinc-200 hover:border-orange-500 hover:shadow-lg transition-all cursor-pointer overflow-hidden group"
                 >
                   <div className="flex gap-4 p-4">
                     {/* Produktbild */}
-                    <div className="w-24 h-24 flex-shrink-0 bg-white rounded-lg border border-zinc-200 overflow-hidden flex items-center justify-center">                    
-             {product.obi_image_url ? ( <img
-           src={product.obi_image_url}
-          alt={product.Art_Bezeichnung}
-           className="w-full h-full object-contain"
-            onError={(e) => {
-             (e.target as HTMLImageElement).style.display = 'none';
-             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-           }}
-          />
-        ) : null}
-       <div className={`${product.obi_image_url ? 'hidden' : ''} text-zinc-300`}>
-        <ImageIcon size={32} />
-      </div>
-     </div>
+                    <div className="w-24 h-24 flex-shrink-0 bg-white rounded-lg border border-zinc-200 overflow-hidden flex items-center justify-center">
+                      {product.obi_image_url ? (<img
+                        src={product.obi_image_url}
+                        alt={product.Art_Bezeichnung}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                      ) : null}
+                      <div className={`${ product.obi_image_url ? 'hidden' : '' } text-zinc-300`}>
+                        <ImageIcon size={32} />
+                      </div>
+                    </div>
                     {/* Produktinfo */}
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-zinc-900 mb-1 line-clamp-2 group-hover:text-orange-500 transition-colors">
@@ -465,8 +478,8 @@ export default function ArtikelForm() {
           </div>
         )}
 
-    </div>
+      </div>
 
-  </div>
+    </div>
   );
 };
