@@ -9,12 +9,13 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-IONOS_API_TOKEN = os.getenv("IONOS_API_TOKEN")
-IONOS_ENDPOINT = os.getenv("IONOS_ENDPOINT")  # e.g. https://openai.inference.de-txl.ionos.com/v1/chat/completions
-MODEL_NAME = os.getenv("MODEL_NAME", "mistralai/Mistral-Small-24B-Instruct")
+OPENAI_API_TOKEN = os.getenv("OPENAI_API_TOKEN")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL","https://api.openai.com/v1")  # e.g. https://api.openai.com/v1
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+VERIFY_SSL = os.getenv("VERIFY_SSL", "true").lower() == "true"
 
-if not IONOS_API_TOKEN:
-    raise RuntimeError("IONOS_API_TOKEN is not set in .env")
+if not OPENAI_API_TOKEN:
+    raise RuntimeError("OPENAI_API_TOKEN is not set in .env")
 
 
 def file_to_data_uri(path: str) -> str:
@@ -38,14 +39,14 @@ def image_to_text(image_path: str) -> str:
         {
             "role": "system",
             "content": (
-                "You are an assistant that describes images. "
-                "Return a short and precise description of the image in English."
+                    "Du bist ein Assistent, der Bilder beschreibt. "
+                    "Gib eine kurze und präzise Beschreibung des Bildes auf Deutsch zurück."
             ),
         },
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "Describe this image briefly."},
+                {"type": "text", "text": "Beschreibe dieses Bild kurz."},
                 {
                     "type": "image_url",
                     "image_url": {"url": data_uri, "detail": "high"},
@@ -55,24 +56,25 @@ def image_to_text(image_path: str) -> str:
     ]
 
     body = {
-        "model": MODEL_NAME,
+        "model": OPENAI_MODEL,
         "messages": messages,
-        "max_completion_tokens": 300,
+        "max_tokens": 300,
     }
 
     headers = {
-        "Authorization": f"Bearer {IONOS_API_TOKEN}",
+        "Authorization": f"Bearer {OPENAI_API_TOKEN}",
         "Content-Type": "application/json",
     }
+    url = f"{OPENAI_BASE_URL.rstrip('/')}/chat/completions"
 
     response = requests.post(
-        IONOS_ENDPOINT,
+        url,
         json=body,
         headers=headers,
-        verify=False,  # if you have proper SSL, set this to True
+        verify=VERIFY_SSL,  # if you have proper SSL, set this to True
         timeout=30,
     )
     response.raise_for_status()
     payload = response.json()
 
-    return payload["choices"][0]["message"]["content"]
+    return payload["choices"][0]["message"]["content"].strip()
