@@ -64,7 +64,11 @@ def decode_lagerplatz(lp: str) -> str:
     except Exception:
         return f"Lagerplatz {lp}"
 
-
+STOPWORDS = {
+   "das", "bild", "zeigt", "eine", "einen", "der", "die", "den",
+   "ist", "im", "vom", "mit", "und", "oder", "einem", "einer",
+   "hand", "hintergrund"   
+}
 def simple_search(query: str, limit: int = 5):
     """
     Very simple keyword-based search over 'Art_Bezeichnung'.
@@ -77,7 +81,7 @@ def simple_search(query: str, limit: int = 5):
     if not q:
         return []
 
-    words = [w for w in re.findall(r"\w+", q) if len(w) > 2]
+    words = [w for w in re.findall(r"\w+", q) if len(w) > 2 and w not in STOPWORDS]
 
     def score_row(text: str) -> int:
         t = str(text).lower()

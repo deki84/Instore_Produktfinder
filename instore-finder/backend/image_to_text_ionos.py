@@ -39,14 +39,14 @@ def image_to_text(image_path: str) -> str:
         {
             "role": "system",
             "content": (
-                "You are an assistant that describes images. "
-                "Return a short and precise description of the image in English."
+                    "Du bist ein Assistent, der Bilder beschreibt. "
+                    "Gib eine kurze und präzise Beschreibung des Bildes auf Deutsch zurück."
             ),
         },
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "Describe this image briefly."},
+                {"type": "text", "text": "Beschreibe dieses Bild kurz."},
                 {
                     "type": "image_url",
                     "image_url": {"url": data_uri, "detail": "high"},
