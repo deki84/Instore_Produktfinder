@@ -39,14 +39,17 @@ def image_to_text(image_path: str) -> str:
         {
             "role": "system",
             "content": (
-                    "Du bist ein Assistent, der Bilder beschreibt. "
-                    "Gib eine kurze und präzise Beschreibung des Bildes auf Deutsch zurück."
+                    "Du bist ein Assistent für einen Baumarkt-Produktfinder. "
+                    "Analysiere das Bild und beschreibe NUR die Produkte, die du siehst. "
+                    "Fokussiere dich auf: Produktname, Typ, Material, Farbe, Größe, Form und wichtige Details. "
+                    "Wenn keine Produkte im Bild sind, schreibe 'Kein Produkt erkannt'. "
+                    "Gib eine kurze, präzise Produktbeschreibung auf Deutsch zurück."
             ),
         },
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "Beschreibe dieses Bild kurz."},
+                {"type": "text", "text": "Beschreibe die Produkte in diesem Bild detailliert. Nenne Produktname, Typ, Material, Farbe und wichtige Merkmale."},
                 {
                     "type": "image_url",
                     "image_url": {"url": data_uri, "detail": "high"},
