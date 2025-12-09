@@ -43,6 +43,38 @@ def load_products_from_supabase() -> pd.DataFrame:
     df["Art_Nr"] = df["Art_Nr"].astype(str).str.strip()
     return df
 
+def fetch_product_from_supabase(art_nr: str) -> dict | None:
+    """
+    Fetch a single product row by Art_Nr directly from Supabase.
+    Returns dict if found, else None.
+    """
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+
+    artnr_clean = str(art_nr).strip()
+    url = f"{SUPABASE_URL}/rest/v1/products"
+    params = {
+        "Art_Nr": f"eq.{artnr_clean}",
+        "select": "Art_Nr,Art_Bezeichnung,Lagerplatz,obi_image_url,Verpackung_Groesse,train_text",
+        "limit": 1,
+    }
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    }
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
+        if resp.status_code != 200:
+            print(f"[DEBUG] fetch_product_from_supabase status {resp.status_code}: {resp.text[:200]}")
+            return None
+        data = resp.json()
+        if not data:
+            return None
+        return data[0]
+    except Exception as e:
+        print(f"[DEBUG] fetch_product_from_supabase error for {artnr_clean}: {e}")
+        return None
+
 
 def update_product_image_url(art_nr: str, image_url: str) -> None:
     """
@@ -148,6 +180,7 @@ def answer_query(user_text: str) -> str:
     - If user_text contains an Art_Nr, try exact match (+ image URL).
     - Otherwise use simple_search over the description.
     """
+    global df_prod
     if not SERVICE_READY or df_prod is None:
         return "Der Produktservice ist noch nicht konfiguriert (Produktdaten fehlen)."
 
@@ -161,11 +194,27 @@ def answer_query(user_text: str) -> str:
         artnr = m.group(0)
 
         if artnr not in df_prod["Art_Nr"].values:
-            return (
-                f"Wir haben alles durchsucht, "
-                f"aber leider keinen passenden Treffer "
-                f"für die Artikelnummer {artnr} gefunden."
-            )
+            # Versuch: direkt aus Supabase nachladen (für neu hinzugefügte Produkte)
+            try:
+                fetched = fetch_product_from_supabase(artnr)
+                if fetched:
+                    # in DataFrame einfügen und erneut verwenden
+                    fetched_row = pd.DataFrame([fetched])
+                    fetched_row["Art_Nr"] = fetched_row["Art_Nr"].astype(str).str.strip()
+                    df_prod = pd.concat([df_prod, fetched_row], ignore_index=True)
+                else:
+                    return (
+                        f"Wir haben alles durchsucht, "
+                        f"aber leider keinen passenden Treffer "
+                        f"für die Artikelnummer {artnr} gefunden."
+                    )
+            except Exception as e:
+                print(f"[DEBUG] Error fetching product {artnr} from Supabase: {e}")
+                return (
+                    f"Wir haben alles durchsucht, "
+                    f"aber leider keinen passenden Treffer "
+                    f"für die Artikelnummer {artnr} gefunden."
+                )
 
         row = df_prod[df_prod["Art_Nr"] == artnr].iloc[0]
         loc = decode_lagerplatz(row.get("Lagerplatz", ""))
@@ -257,11 +306,13 @@ def answer_from_image(image_path: str, limit: int = 5) -> str:
 def get_product_by_art_nr(art_nr: str) -> dict | None:
     """
     Look up a single product by Art_Nr in the loaded DataFrame.
+    If not found, tries to fetch from Supabase dynamically.
 
     Returns:
       - dict with all columns (including obi_image_url) if found
       - None if no matching product exists or the service is not ready
     """
+    global df_prod
     # If service or dataframe is not ready, abort
     if not SERVICE_READY or df_prod is None:
         return None
@@ -272,7 +323,23 @@ def get_product_by_art_nr(art_nr: str) -> dict | None:
     # Filter dataframe by Art_Nr
     rows = df_prod[df_prod["Art_Nr"] == artnr_clean]
     if rows.empty:
-        return None
+        # Versuch: direkt aus Supabase nachladen (für neu hinzugefügte Produkte)
+        try:
+            fetched = fetch_product_from_supabase(artnr_clean)
+            if fetched:
+                # in DataFrame einfügen und erneut verwenden
+                fetched_row = pd.DataFrame([fetched])
+                fetched_row["Art_Nr"] = fetched_row["Art_Nr"].astype(str).str.strip()
+                df_prod = pd.concat([df_prod, fetched_row], ignore_index=True)
+                # Jetzt sollte es im DataFrame sein
+                rows = df_prod[df_prod["Art_Nr"] == artnr_clean]
+                if rows.empty:
+                    return None
+            else:
+                return None
+        except Exception as e:
+            print(f"[DEBUG] Error fetching product {artnr_clean} from Supabase in get_product_by_art_nr: {e}")
+            return None
 
     # Convert first row to a plain dict for FastAPI
     row = rows.iloc[0]
@@ -345,6 +412,12 @@ def answer_from_image_structured(image_path: str, limit: int = 5) -> dict:
                 print(f"[DEBUG] error fetching image URL for {art_nr}: {e}")
                 obi_image_url = None
 
+        # Get train_text (Beschreibung) from Supabase
+        train_text_raw = row.get("train_text", None)
+        train_text = None
+        if pd.notna(train_text_raw) and train_text_raw not in ("", None):
+            train_text = str(train_text_raw).strip() or None
+
         product_data = {
             "Art_Nr": str(row.get("Art_Nr", "")).strip(),
             "Art_Bezeichnung": row.get("Art_Bezeichnung", ""),
@@ -352,6 +425,7 @@ def answer_from_image_structured(image_path: str, limit: int = 5) -> dict:
             "Lagerplatz_decoded": decode_lagerplatz(row.get("Lagerplatz", "")),
             "obi_image_url": obi_image_url,
             "Verpackung_Groesse": row.get("Verpackung_Groesse", "") or None,
+            "train_text": train_text,
             "score": candidate.get("score", 0),
         }
 

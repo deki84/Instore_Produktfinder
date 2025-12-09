@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
-import mapImage from '../../assets/map.jpg';
+import mapImage from '../assets/map.jpg';
 import { Search, Plus, Minus, MapPin, Navigation, Menu, X, ChevronRight, Compass, Target, Check, Footprints, Info } from 'lucide-react';
 
 // --- PRODUKT MAPPING (Simulation einer Datenbank) ---

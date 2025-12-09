@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   CheckCircle,
   Sparkles,
-  ChevronRight,
   Info,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -113,123 +112,113 @@ function ProductSelectionContent() {
   }, [queryText, artikelnummer]);
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-800 pb-10">
+    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-800 flex items-start justify-center py-10 w-full">
+      {/* ZENTRIERTER APP-CONTAINER */}
+      <div className="flex flex-col mx-auto" style={{ width: '369px', maxWidth: '369px' }}>
+        {/* HEADER SECTION */}
+        <div className="bg-orange-500 pt-12 pb-8 px-4 sm:px-6 shadow-lg rounded-b-[2.5rem] w-full" style={{ width: '369px', maxWidth: '369px' }}>
+          <div className="w-full">
+            {/* Back button */}
+            <button
+              onClick={() => router.back()}
+              className="text-orange-100 hover:text-white flex items-center gap-2 mb-4 transition-colors"
+            >
+              <ArrowLeft size={20} />
+              <span className="font-medium">Back to Search</span>
+            </button>
 
-      {/* HEADER SECTION */}
-      <div className="bg-orange-500 pt-12 pb-8 px-6 shadow-lg rounded-b-[2.5rem]">
-        <div className="max-w-4xl mx-auto">
+            {/* Title */}
+            <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
+              Product Selection
+            </h1>
 
-          {/* Back button */}
-          <button
-            onClick={() => router.back()}
-            className="text-orange-100 hover:text-white flex items-center gap-2 mb-4 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            <span className="font-medium">Back to Search</span>
-          </button>
-
-          {/* Title */}
-          <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
-            Product Selection
-          </h1>
-
-          <p className="text-orange-50 font-medium flex items-center gap-2 opacity-90">
-            <Sparkles size={16} />
-            AI Analysis for `{displayTitle}`
-          </p>
-
-          {/* Error message */}
-          {error && (
-            <p className="mt-2 text-sm bg-black/20 text-orange-50 px-3 py-1 rounded-lg">
-              Error: {error}
+            <p className="text-orange-50 font-medium flex items-center gap-2 opacity-90">
+              <Sparkles size={16} />
+              AI Analysis for `{displayTitle}`
             </p>
-          )}
+
+            {/* Error message */}
+            {error && (
+              <p className="mt-2 text-sm bg-black/20 text-orange-50 px-3 py-1 rounded-lg">
+                Error: {error}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* CONTENT GRID */}
-      <div className="max-w-4xl mx-auto px-4 -mt-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-          {/* Loading indicator */}
-          {loading && (
-            <div className="col-span-full text-center text-sm text-zinc-400 py-10">
-              Loading results...
-            </div>
-          )}
-
-          {/* No results */}
-          {!loading && !error && !resultText && (
-            <div className="col-span-full text-center text-sm text-zinc-400 py-10">
-              No results found.
-            </div>
-          )}
-
-          {/* Result Card */}
-          {!loading && resultText && (
-            <div className="bg-white rounded-3xl shadow-xl border border-zinc-100 overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full group">
-
-              {/* IMAGE SECTION */}
-              {imageUrl ? (
-                <Image
-                src={imageUrl}
-                alt={displayTitle}
-                width={260}
-                height={260}
-                className="object-contain rounded-xl"
-                unoptimized
-              />
-              ) : (
-                <div className="w-full h-full bg-white rounded-xl flex items-center justify-center text-zinc-300 shadow-inner">
-                  <span className="font-bold text-4xl select-none opacity-20">
-                    OBI
-                  </span>
-                </div>
-              )}
-
-              {/* TEXT SECTION */}
-              <div className="p-6 flex flex-col flex-grow">
-
-                {/* Position badge */}
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md">
-                    <CheckCircle size={12} />
-                    Position found
-                  </div>
-                </div>
-
-                {/* Title */}
-                <h3 className="text-lg font-bold text-zinc-900 leading-tight mb-3 group-hover:text-orange-500 transition-colors">
-                  {displayTitle}
-                </h3>
-
-                {/* Result description */}
-                <div className="bg-orange-50/50 rounded-xl p-3 mb-4 border border-orange-100/50 flex-grow">
-                  <div className="flex gap-2 items-start">
-                    <Info
-                      size={16}
-                      className="text-orange-400 mt-0.5 flex-shrink-0"
-                    />
-                    <p className="text-sm text-zinc-600 leading-relaxed whitespace-pre-wrap">
-                      {cleanedResultText ?? resultText}
-                     </p>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between mt-auto pt-2 border-t border-zinc-100">
-                  <span className="text-sm font-semibold text-zinc-400">
-                    View details
-                  </span>
-                  <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors">
-                    <ChevronRight size={16} />
-                  </div>
-                </div>
-
+        {/* CONTENT */}
+        <div className="-mt-6 w-full">
+          <div className="flex flex-col gap-6">
+            {/* Loading indicator */}
+            {loading && (
+              <div className="text-center text-sm text-zinc-400 py-10">
+                Loading results...
               </div>
-            </div>
-          )}
+            )}
 
+            {/* No results */}
+            {!loading && !error && !resultText && (
+              <div className="text-center text-sm text-zinc-400 py-10">
+                No results found.
+              </div>
+            )}
+
+            {/* Result Card */}
+            {!loading && resultText && (
+              <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border border-zinc-100 overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex flex-col group mx-auto"
+                   style={{ width: '369px' }}>
+                {/* IMAGE SECTION */}
+                <div className="w-full aspect-[4/3] bg-zinc-50 rounded-t-2xl sm:rounded-t-3xl overflow-hidden flex items-center justify-center flex-shrink-0">
+                  {imageUrl ? (
+                    <Image
+                      src={imageUrl}
+                      alt={displayTitle}
+                      width={400}
+                      height={300}
+                      className="object-contain w-full h-full p-4"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-white flex items-center justify-center text-zinc-300">
+                      <span className="font-bold text-4xl select-none opacity-20">
+                        OBI
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* TEXT SECTION */}
+                <div className="p-4 sm:p-6 flex flex-col flex-grow">
+                  {/* Position badge */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-green-600 bg-green-50 px-2.5 py-1.5 rounded-lg">
+                      <CheckCircle size={14} />
+                      Position gefunden
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="text-xl sm:text-2xl font-bold text-zinc-900 leading-tight mb-4 group-hover:text-orange-500 transition-colors">
+                    {displayTitle}
+                  </h3>
+
+                  {/* Result description */}
+                  <div className="bg-orange-50/50 rounded-xl p-4 mb-4 border border-orange-100/50 flex-grow">
+                    <div className="flex gap-3 items-start">
+                      <Info
+                        size={18}
+                        className="text-orange-500 mt-0.5 flex-shrink-0"
+                      />
+                      <p className="text-sm sm:text-base text-zinc-700 leading-relaxed whitespace-pre-wrap">
+                        {cleanedResultText ?? resultText}
+                      </p>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
