@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import re
 
+from product_by_id import fetch_product_image_url
 from image_to_text_ionos import image_to_text
 from dotenv import load_dotenv  
 load_dotenv()
@@ -43,15 +44,48 @@ def load_products_from_supabase() -> pd.DataFrame:
     return df
 
 
+def update_product_image_url(art_nr: str, image_url: str) -> None:
+    """
+    Store the discovered image URL back into Supabase and update df_prod.
+    """
+    if not SUPABASE_URL or not SUPABASE_KEY or df_prod is None:
+        return
+
+    artnr_clean = str(art_nr).strip()
+
+    url = f"{SUPABASE_URL}/rest/v1/products"
+    params = {
+        "Art_Nr": f"eq.{artnr_clean}",
+    }
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal",
+    }
+
+    payload = {"obi_image_url": image_url}
+
+    try:
+        resp = requests.patch(url, params=params, headers=headers, json=payload, timeout=30)
+        if resp.status_code in (200, 204):
+            df_prod.loc[df_prod["Art_Nr"] == artnr_clean, "obi_image_url"] = image_url
+        else:
+            print(f"[DEBUG] failed to update obi_image_url for {artnr_clean}: {artnr_clean}: {resp.status_code} {resp.text[:200]}")
+    except Exception as e:
+        print(f"[DEBUG] exception while updating obi_image_url for {artnr_clean}: {e}")
+
 try:
     df_prod = load_products_from_supabase()
     SERVICE_READY = True
     print("Produkte geladen:", len(df_prod))
+    print("Beispiel-Art_Nr:", df_prod["Art_Nr"].head(10).tolist())
     print("Service bereit.\n")
 except Exception as e:
     print("Fehler beim Laden aus Supabase:", e)
     print("Service startet ohne Produktsuche.\n")
 
+    
 
 def decode_lagerplatz(lp: str) -> str:
     """
@@ -108,13 +142,11 @@ def simple_search(query: str, limit: int = 5):
 
     return results
 
-
 def answer_query(user_text: str) -> str:
     """
     Main text-based lookup:
-    - If user_text contains an Art_Nr, try exact match.
+    - If user_text contains an Art_Nr, try exact match (+ image URL).
     - Otherwise use simple_search over the description.
-    Returns a German explanation string.
     """
     if not SERVICE_READY or df_prod is None:
         return "Der Produktservice ist noch nicht konfiguriert (Produktdaten fehlen)."
@@ -137,10 +169,29 @@ def answer_query(user_text: str) -> str:
 
         row = df_prod[df_prod["Art_Nr"] == artnr].iloc[0]
         loc = decode_lagerplatz(row.get("Lagerplatz", ""))
-        return (
+
+        # DB first
+        obi_image_url = row.get("obi_image_url", "") or None
+
+        # Fallback: fetch from obi.de and store in Supabase
+        if obi_image_url is None:
+            try:
+                fetched_url = fetch_product_image_url(artnr)
+                if fetched_url:
+                    obi_image_url = fetched_url
+                    update_product_image_url(artnr, fetched_url)
+            except Exception as e:
+                print(f"[DEBUG] error fetching image URL for {artnr}: {e}")
+
+        base_text = (
             f"Der Artikel '{row['Art_Bezeichnung']}' "
             f"mit der Nummer {row['Art_Nr']} befindet sich bei {loc}."
         )
+
+        if obi_image_url:
+            return base_text + f"\nBild-URL: {obi_image_url}"
+
+        return base_text
 
     # No clear Art_Nr found → keyword search
     candidates = simple_search(user_text, limit=5)
@@ -167,12 +218,11 @@ def answer_query(user_text: str) -> str:
 
     return "\n".join(lines)
 
-
-def answer_from_image(image_path: str) -> str:
+    
+def answer_from_image(image_path: str, limit: int = 5) -> str:
     """
-    Run the OPENAI image model on a local file path,
-    then do a simple_search with the generated caption.
-    Returns a formatted text string (for backwards compatibility).
+    Classic version: image -> caption -> simple_search, returns plain text.
+    Used mainly for debugging or CLI usage.
     """
     if not SERVICE_READY or df_prod is None:
         return "Der Bildservice ist noch nicht konfiguriert (Produktdaten fehlen)."
@@ -187,11 +237,11 @@ def answer_from_image(image_path: str) -> str:
 
     print(f"[Debug] Bildbeschreibung: {caption}")
 
-    candidates = simple_search(caption, limit=5)
+    candidates = simple_search(caption, limit=limit)
     if not candidates:
         return "Ich konnte keinen passenden Artikel zum Bild finden."
 
-    lines = []
+    lines: list[str] = []
     lines.append(f"Bildbeschreibung: {caption}")
     lines.append("")
     lines.append("Mögliche Artikel:")
@@ -199,13 +249,36 @@ def answer_from_image(image_path: str) -> str:
     for i, c in enumerate(candidates, start=1):
         loc = decode_lagerplatz(c.get("Lagerplatz", ""))
         lines.append(
-            f"{i}. {c['Art_Bezeichnung']} "
-            f"(Art.-Nr. {c['Art_Nr']}), {loc}"
+            f"{i}. {c['Art_Bezeichnung']} (Art.-Nr. {c['Art_Nr']}), {loc}"
         )
 
     return "\n".join(lines)
 
+def get_product_by_art_nr(art_nr: str) -> dict | None:
+    """
+    Look up a single product by Art_Nr in the loaded DataFrame.
 
+    Returns:
+      - dict with all columns (including obi_image_url) if found
+      - None if no matching product exists or the service is not ready
+    """
+    # If service or dataframe is not ready, abort
+    if not SERVICE_READY or df_prod is None:
+        return None
+
+    # Normalize article number (string, stripped)
+    artnr_clean = str(art_nr).strip()
+
+    # Filter dataframe by Art_Nr
+    rows = df_prod[df_prod["Art_Nr"] == artnr_clean]
+    if rows.empty:
+        return None
+
+    # Convert first row to a plain dict for FastAPI
+    row = rows.iloc[0]
+    return row.to_dict()
+
+    
 def answer_from_image_structured(image_path: str, limit: int = 5) -> dict:
     """
     Run the OPENAI image model on a local file path,
@@ -240,26 +313,49 @@ def answer_from_image_structured(image_path: str, limit: int = 5) -> dict:
     print(f"[Debug] Bildbeschreibung: {caption}")
 
     candidates = simple_search(caption, limit=limit)
-    
-    # Enrich candidates with full product data from DataFrame
+
     enriched_products = []
+
     for candidate in candidates:
         art_nr = candidate["Art_Nr"]
-        # Find the full row in DataFrame
+
+        # Find the full row in the DataFrame
         product_row = df_prod[df_prod["Art_Nr"] == art_nr]
-        
-        if not product_row.empty:
-            row = product_row.iloc[0]
-            product_data = {
-                "Art_Nr": str(row.get("Art_Nr", "")).strip(),
-                "Art_Bezeichnung": row.get("Art_Bezeichnung", ""),
-                "Lagerplatz": row.get("Lagerplatz", ""),
-                "Lagerplatz_decoded": decode_lagerplatz(row.get("Lagerplatz", "")),
-                "obi_image_url": row.get("obi_image_url", "") or None,
-                "Verpackung_Groesse": row.get("Verpackung_Groesse", "") or None,
-                "score": candidate.get("score", 0)
-            }
-            enriched_products.append(product_data)
+        if product_row.empty:
+            continue
+
+        row = product_row.iloc[0]
+
+        # 1) Try image URL from database first
+             # 1) Read image URL from DB and normalize NaN / empty to None
+        raw_val = row.get("obi_image_url", None)
+        if pd.isna(raw_val) or raw_val in ("", None):
+            obi_image_url = None
+        else:
+            obi_image_url = str(raw_val).strip() or None
+
+        # 2) If still None → fetch from obi.de and store in DB + df_prod
+        if obi_image_url is None:
+            try:
+                fetched_url = fetch_product_image_url(art_nr)
+                if fetched_url:
+                    obi_image_url = fetched_url
+                    update_product_image_url(art_nr, fetched_url)
+            except Exception as e:
+                print(f"[DEBUG] error fetching image URL for {art_nr}: {e}")
+                obi_image_url = None
+
+        product_data = {
+            "Art_Nr": str(row.get("Art_Nr", "")).strip(),
+            "Art_Bezeichnung": row.get("Art_Bezeichnung", ""),
+            "Lagerplatz": row.get("Lagerplatz", ""),
+            "Lagerplatz_decoded": decode_lagerplatz(row.get("Lagerplatz", "")),
+            "obi_image_url": obi_image_url,
+            "Verpackung_Groesse": row.get("Verpackung_Groesse", "") or None,
+            "score": candidate.get("score", 0),
+        }
+
+        enriched_products.append(product_data)
 
     return {
         "caption": caption,
@@ -267,64 +363,4 @@ def answer_from_image_structured(image_path: str, limit: int = 5) -> dict:
         "error": None
     }
 
-
-def get_product_by_art_nr(art_nr: str) -> dict | None:
-    """
-    Look up a single product row by Art_Nr in the in-memory DataFrame.
-
-    This is used by the FastAPI endpoint /obi_image/{art_nr}
-    to return the correct image URL for a given article number.
-    """
-    if df_prod is None:
-        # Data was not loaded correctly at startup
-        return None
-
-    # Normalize incoming article number to the same format as in df_prod
-    artnr_clean = str(art_nr).strip()
-
-    # Filter DataFrame for matching Art_Nr
-    rows = df_prod[df_prod["Art_Nr"] == artnr_clean]
-    if rows.empty:
-        # No product found for this article number
-        return None
-
-    # Take the first matching row
-    row = rows.iloc[0]
-
-    # Return a plain Python dict, so FastAPI can easily work with it
-    return {
-        "Art_Nr": str(row.get("Art_Nr", "")).strip(),
-        "Art_Bezeichnung": row.get("Art_Bezeichnung", ""),
-        "Lagerplatz": row.get("Lagerplatz", ""),
-
-        "obi_image_url": row.get("obi_image_url", ""),
-    }
-
-
-if __name__ == "__main__":
-    print("Produkt Service gestartet.")
-    print("Wähle:")
-    print("  [t] Textfrage / Artikelnummer")
-    print("  [b] Bildpfad eingeben")
-    print("  [exit] beenden\n")
-
-    while True:
-        mode = input("Modus (t/b/exit): ").strip().lower()
-
-        if mode in {"exit", "quit", "q"}:
-            break
-
-        if mode == "t":
-            q = input("Frage oder Artikelnummer: ").strip()
-            print()
-            print(answer_query(q))
-            print()
-
-        elif mode == "b":
-            path = input("Pfad zum Bild: ").strip().strip('"')
-            print()
-            print(answer_from_image(path))
-            print()
-
-        else:
-            print("Bitte 't' für Text, 'b' für Bild oder 'exit' zum Beenden.\n")
+    

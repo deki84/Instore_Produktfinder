@@ -2,6 +2,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Camera, X, RefreshCw, Sparkles, ScanLine, MapPin, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+// oben im File
+import Image from "next/image";
+
 
 
 
@@ -36,7 +39,8 @@ export default function ArtikelForm() {
   }
 
   const [imageSearchResults, setImageSearchResults] = useState<ImageSearchResponse | null>(null);
-  
+    // Stores image URLs that are loaded on demand from /obi_image/{Art_Nr}
+    const [loadedImageUrls, setLoadedImageUrls] = useState<Record<string, string>>({});
   // Native Video Refs statt react-webcam
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -86,7 +90,10 @@ export default function ArtikelForm() {
       streamRef.current = null;
     }
     setShowCamera(false);
-  }, []);
+  }
+  
+  
+  , []);
 
   const toggleCamera = () => {
     setFacingMode(prev => prev === "user" ? "environment" : "user");
@@ -218,6 +225,47 @@ export default function ArtikelForm() {
     "image/jpeg"
   );
 }, [stopCamera]);
+
+  // Load missing image URLs from the backend (/obi_image/{Art_Nr})
+  useEffect(() => {
+    if (!imageSearchResults || !imageSearchResults.products) return;
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) {
+      console.warn("NEXT_PUBLIC_API_BASE_URL is not set – cannot load images.");
+      return;
+    }
+
+    const fetchMissingImages = async () => {
+      for (const p of imageSearchResults.products) {
+        const artNr = p.Art_Nr;
+        if (!artNr) continue;
+
+        // If product already has an image URL or we already loaded one → skip
+        if (p.obi_image_url) continue;
+        if (loadedImageUrls[artNr]) continue;
+
+        try {
+          const res = await fetch(`${baseUrl}/obi_image/${artNr}`);
+          if (!res.ok) {
+            console.warn("Failed to load image for", artNr, res.status);
+            continue;
+          }
+          const data = await res.json();
+          if (data.imageUrl) {
+            setLoadedImageUrls(prev => ({
+              ...prev,
+              [artNr]: data.imageUrl,
+            }));
+          }
+        } catch (err) {
+          console.error("Error fetching image for", artNr, err);
+        }
+      }
+    };
+
+    fetchMissingImages();
+  }, [imageSearchResults, loadedImageUrls]);
   
 
   // Dummy-Funktion für den KI-Agenten
@@ -397,7 +445,7 @@ export default function ArtikelForm() {
               )}
             </div>
             
-            <div className="grid grid-cols-1 gap-4">
+            <div className=" grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {imageSearchResults.products.map((product: ProductResult, index: number) => (
                 <div
                   key={product.Art_Nr || index}
@@ -410,21 +458,37 @@ export default function ArtikelForm() {
                 >
                   <div className="flex gap-4 p-4">
                     {/* Produktbild */}
-                    <div className="w-24 h-24 flex-shrink-0 bg-white rounded-lg border border-zinc-200 overflow-hidden flex items-center justify-center">                    
-             {product.obi_image_url ? ( <img
-           src={product.obi_image_url}
-          alt={product.Art_Bezeichnung}
-           className="w-full h-full object-contain"
-            onError={(e) => {
-             (e.target as HTMLImageElement).style.display = 'none';
-             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-           }}
-          />
-        ) : null}
-       <div className={`${product.obi_image_url ? 'hidden' : ''} text-zinc-300`}>
+                      {/* Product image */}
+                      <div className="w-24 h-24 flex-shrink-0 bg-white rounded-lg border border-zinc-200 overflow-hidden flex items-center justify-center">
+                  {(() => {
+                     const finalImageUrl =
+                     product.obi_image_url || loadedImageUrls[product.Art_Nr];
+
+                     if (finalImageUrl) {
+                    return (
+                      <Image
+                      src={finalImageUrl}
+                      alt={product.Art_Bezeichnung}
+                      width={96}
+                      height={96}
+                      className="object-contain"
+                      unoptimized
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                        target.nextElementSibling?.classList.remove("hidden");
+                      }}
+                    />
+                     );
+               }
+
+    return (
+      <div className="text-zinc-300">
         <ImageIcon size={32} />
       </div>
-     </div>
+    );
+  })()}
+                        </div>
                     {/* Produktinfo */}
                     <div className="flex-1 min-w-0">
                       <h3 className="font-bold text-zinc-900 mb-1 line-clamp-2 group-hover:text-orange-500 transition-colors">

@@ -27,7 +27,7 @@ HEADERS = {
 }
 
 
-app = FastAPI(title="Image/Text → ProdId (IONOS + Mistral)")
+app = FastAPI(title="Image/Text → ProdId (OPENAI)")
 
 # Allow Next.js app (http://localhost:3000) to call this API from the browser
 app.add_middleware(
@@ -114,34 +114,31 @@ async def image_to_prod_id(
             os.remove(tmp_path)
         except OSError:
             pass
+
+
 @app.get("/obi_image/{art_nr}")
 def get_obi_image(art_nr: str):
     """
-    Returns the image URL for a given Art_Nr from our Supabase products table.
+    Return image URL for a given Art_Nr.
+
+    - If the product does not exist → 404
+    - If the product exists but has no image → imageUrl = null
+      (frontend shows placeholder, no error)
     """
-    # 1) Find product in the in-memory list
+    # 1) Load product from product_service / DataFrame
     product = get_product_by_art_nr(art_nr)
-    if not product:
-        # Product not in our DB
+    if product is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Produkt mit Art_Nr {art_nr} nicht in unserer DB gefunden.",
+            detail=f"Kein Produkt mit Art_Nr {art_nr} gefunden.",
         )
 
-    # 2) Get obi_image_url from that row
-    image_url = product.get("obi_image_url")
-    if not image_url:
-        # Product exists but has no image URL
-        raise HTTPException(
-            status_code=404,
-            detail=f"Kein Bild für Art_Nr {art_nr} in obi_image_url hinterlegt.",
-        )
+    # 2) Normalize image URL: empty string -> None
+    raw_val = product.get("obi_image_url")
+    image_url = str(raw_val).strip() if raw_val else None
 
-    # 3) Return the payload for the frontend
+    # 3) Always return payload, even if image_url is None
     return {
         "art_nr": art_nr,
-        "imageUrl": image_url,
+        "imageUrl": image_url,  # string oder null
     }
-
-
-   
