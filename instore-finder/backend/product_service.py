@@ -135,10 +135,44 @@ STOPWORDS = {
    "ist", "im", "vom", "mit", "und", "oder", "einem", "einer",
    "hand", "hintergrund"   
 }
+
+# Category mapping for intelligent prioritization
+CATEGORY_KEYWORDS = {
+    "farbe": ["farbe", "lack", "anstrich", "pinsel", "roller", "wände", "wand", "weiß", "schwarz", "rot", "blau", "grün", "gelb"],
+    "fliesen": ["fliesen", "fliese", "badezimmer", "küche", "wand", "boden"],
+    "holz": ["holz", "bretter", "latten", "dielen", "parkett", "leiste"],
+    "werkzeug": ["schrauben", "dübel", "bohrer", "hammer", "zange", "schraubendreher"],
+    "garten": ["garten", "erde", "dünger", "blumen", "pflanzen", "gartenstuhl", "gartenmöbel"],
+    "elektro": ["kabel", "steckdose", "schalter", "lampe", "leuchte", "birne"],
+    "sanitär": ["waschbecken", "spüle", "toilette", "dusche", "badewanne", "armatur", "keramik"],
+}
+
+def extract_keywords_and_category(query: str) -> tuple[list[str], str | None]:
+    """
+    Extracts important keywords from the query and detects the category.
+    Returns: (keywords, category)
+    """
+    q_lower = query.lower()
+    words = [w for w in re.findall(r"\w+", q_lower) if len(w) > 2 and w not in STOPWORDS]
+    
+    # Detect category based on keywords
+    detected_category = None
+    max_matches = 0
+    
+    for category, keywords in CATEGORY_KEYWORDS.items():
+        matches = sum(1 for kw in keywords if kw in q_lower)
+        if matches > max_matches:
+            max_matches = matches
+            detected_category = category
+    
+    return words, detected_category
+
 def simple_search(query: str, limit: int = 5):
     """
-    Very simple keyword-based search over 'Art_Bezeichnung'.
-    Returns a list of dicts with Art_Nr, Art_Bezeichnung, Lagerplatz, score.
+    Improved keyword-based search with AI prioritization:
+    - Searches Art_Bezeichnung and train_text
+    - Prioritizes products based on detected categories
+    - Weights important keywords higher
     """
     if not SERVICE_READY or df_prod is None:
         return []
@@ -147,13 +181,50 @@ def simple_search(query: str, limit: int = 5):
     if not q:
         return []
 
-    words = [w for w in re.findall(r"\w+", q) if len(w) > 2 and w not in STOPWORDS]
+    keywords, category = extract_keywords_and_category(query)
+    
+    if not keywords:
+        return []
 
-    def score_row(text: str) -> int:
-        t = str(text).lower()
-        return sum(1 for w in words if w in t)
+    def score_row(row) -> float:
+        """
+        Calculates a score for a product row.
+        Higher scores for:
+        - More keyword matches
+        - Matches in Art_Bezeichnung (weighted higher than train_text)
+        - Category matches
+        """
+        score = 0.0
+        
+        # Search Art_Bezeichnung (highest priority)
+        bezeichnung = str(row.get("Art_Bezeichnung", "")).lower()
+        for kw in keywords:
+            if kw in bezeichnung:
+                score += 3.0  # Higher weight for Art_Bezeichnung
+        
+        # Search train_text (if available)
+        train_text = row.get("train_text", None)
+        if pd.notna(train_text) and train_text:
+            train_text_lower = str(train_text).lower()
+            for kw in keywords:
+                if kw in train_text_lower:
+                    score += 1.0  # Lower weight for train_text
+        
+        # Category bonus: If category detected, boost matching products
+        if category:
+            category_keywords = CATEGORY_KEYWORDS.get(category, [])
+            bezeichnung_and_text = bezeichnung
+            if pd.notna(train_text) and train_text:
+                bezeichnung_and_text += " " + str(train_text).lower()
+            
+            # Check if product matches this category
+            category_matches = sum(1 for ckw in category_keywords if ckw in bezeichnung_and_text)
+            if category_matches > 0:
+                score += 2.0 * category_matches  # Bonus for category matches
+        
+        return score
 
-    scores = df_prod["Art_Bezeichnung"].apply(score_row)
+    scores = df_prod.apply(score_row, axis=1)
     df_scored = df_prod.copy()
     df_scored["score"] = scores
 
@@ -168,7 +239,7 @@ def simple_search(query: str, limit: int = 5):
                 "Art_Nr": str(row["Art_Nr"]).strip(),
                 "Art_Bezeichnung": row["Art_Bezeichnung"],
                 "Lagerplatz": row.get("Lagerplatz", ""),
-                "score": int(row["score"]),
+                "score": float(row["score"]),
             }
         )
 
@@ -194,11 +265,11 @@ def answer_query(user_text: str) -> str:
         artnr = m.group(0)
 
         if artnr not in df_prod["Art_Nr"].values:
-            # Versuch: direkt aus Supabase nachladen (für neu hinzugefügte Produkte)
+            # Attempt: load directly from Supabase (for newly added products)
             try:
                 fetched = fetch_product_from_supabase(artnr)
                 if fetched:
-                    # in DataFrame einfügen und erneut verwenden
+                    # Insert into DataFrame and reuse
                     fetched_row = pd.DataFrame([fetched])
                     fetched_row["Art_Nr"] = fetched_row["Art_Nr"].astype(str).str.strip()
                     df_prod = pd.concat([df_prod, fetched_row], ignore_index=True)
@@ -242,7 +313,7 @@ def answer_query(user_text: str) -> str:
 
         return base_text
 
-    # No clear Art_Nr found → keyword search
+    # No clear Art_Nr found → use keyword search
     candidates = simple_search(user_text, limit=5)
     if not candidates:
         return "Ich konnte keine passenden Artikel finden."
@@ -323,15 +394,15 @@ def get_product_by_art_nr(art_nr: str) -> dict | None:
     # Filter dataframe by Art_Nr
     rows = df_prod[df_prod["Art_Nr"] == artnr_clean]
     if rows.empty:
-        # Versuch: direkt aus Supabase nachladen (für neu hinzugefügte Produkte)
+        # Attempt: load directly from Supabase (for newly added products)
         try:
             fetched = fetch_product_from_supabase(artnr_clean)
             if fetched:
-                # in DataFrame einfügen und erneut verwenden
+                # Insert into DataFrame and reuse
                 fetched_row = pd.DataFrame([fetched])
                 fetched_row["Art_Nr"] = fetched_row["Art_Nr"].astype(str).str.strip()
                 df_prod = pd.concat([df_prod, fetched_row], ignore_index=True)
-                # Jetzt sollte es im DataFrame sein
+                # Now it should be in the DataFrame
                 rows = df_prod[df_prod["Art_Nr"] == artnr_clean]
                 if rows.empty:
                     return None
@@ -346,40 +417,206 @@ def get_product_by_art_nr(art_nr: str) -> dict | None:
     return row.to_dict()
 
     
+def simple_search_structured(ai_data: dict, limit: int = 5) -> list[dict]:
+    """
+    Enhanced search using structured AI data (produktname, typ, material, farbe, etc.).
+    Prioritizes matches based on specific fields.
+    """
+    if not SERVICE_READY or df_prod is None:
+        return []
+
+    # Extract all relevant keywords from structured data
+    search_terms = []
+    
+    produktname = str(ai_data.get("produktname", "")).lower().strip()
+    if produktname and produktname != "kein produkt erkannt":
+        search_terms.append(produktname)
+    
+    typ = str(ai_data.get("typ", "")).lower().strip()
+    if typ:
+        search_terms.append(typ)
+    
+    material = str(ai_data.get("material", "")).lower().strip()
+    if material:
+        search_terms.append(material)
+    
+    farbe = str(ai_data.get("farbe", "")).lower().strip()
+    if farbe:
+        search_terms.append(farbe)
+    
+    behaelter = str(ai_data.get("behaelter", "")).lower().strip()
+    if behaelter:
+        search_terms.append(behaelter)
+    
+    wichtige_merkmale = str(ai_data.get("wichtige_merkmale", "")).lower().strip()
+    if wichtige_merkmale:
+        search_terms.append(wichtige_merkmale)
+    
+    if not search_terms:
+        return []
+
+    # Combine all search terms
+    combined_query = " ".join(search_terms)
+    
+    def score_row_structured(row) -> float:
+        """
+        Calculates a score for a product row based on structured AI data.
+        Higher scores for:
+        - Matches in produktname (highest priority)
+        - Matches in material, farbe, behaelter (high priority)
+        - Matches in typ, wichtige_merkmale (medium priority)
+        - Matches in Art_Bezeichnung (high priority)
+        - Matches in train_text (lower priority)
+        """
+        score = 0.0
+        
+        bezeichnung = str(row.get("Art_Bezeichnung", "")).lower()
+        train_text = row.get("train_text", None)
+        train_text_lower = str(train_text).lower() if pd.notna(train_text) and train_text else ""
+        combined_text = f"{bezeichnung} {train_text_lower}"
+        
+        # Product name match (highest priority)
+        if produktname and produktname != "kein produkt erkannt":
+            if produktname in bezeichnung:
+                score += 10.0  # Very high weight for product name
+            elif any(word in bezeichnung for word in produktname.split() if len(word) > 3):
+                score += 5.0
+        
+        # Material match (high priority)
+        if material:
+            material_words = [w for w in material.split() if len(w) > 2]
+            for mw in material_words:
+                if mw in combined_text:
+                    score += 4.0
+        
+        # Color match (high priority)
+        if farbe:
+            farbe_words = [w for w in farbe.split() if len(w) > 2]
+            for fw in farbe_words:
+                if fw in combined_text:
+                    score += 4.0
+        
+        # Container match (high priority)
+        if behaelter:
+            behaelter_words = [w for w in behaelter.split() if len(w) > 2]
+            for bw in behaelter_words:
+                if bw in combined_text:
+                    score += 4.0
+        
+        # Type match (medium priority)
+        if typ:
+            typ_words = [w for w in typ.split() if len(w) > 2]
+            for tw in typ_words:
+                if tw in combined_text:
+                    score += 3.0
+        
+        # Important features match (medium priority)
+        if wichtige_merkmale:
+            merkmale_words = [w for w in wichtige_merkmale.split() if len(w) > 2]
+            for mw in merkmale_words:
+                if mw in combined_text:
+                    score += 2.0
+        
+        # General keyword match in Art_Bezeichnung
+        for term in search_terms:
+            words = [w for w in term.split() if len(w) > 2]
+            for word in words:
+                if word in bezeichnung:
+                    score += 2.0
+                elif word in train_text_lower:
+                    score += 1.0
+        
+        return score
+
+    scores = df_prod.apply(score_row_structured, axis=1)
+    df_scored = df_prod.copy()
+    df_scored["score"] = scores
+
+    df_best = df_scored[df_scored["score"] > 0].sort_values(
+        by="score", ascending=False
+    ).head(limit)
+
+    results = []
+    for _, row in df_best.iterrows():
+        results.append(
+            {
+                "Art_Nr": str(row["Art_Nr"]).strip(),
+                "Art_Bezeichnung": row["Art_Bezeichnung"],
+                "Lagerplatz": row.get("Lagerplatz", ""),
+                "score": float(row["score"]),
+            }
+        )
+
+    return results
+
 def answer_from_image_structured(image_path: str, limit: int = 5) -> dict:
     """
-    Run the OPENAI image model on a local file path,
-    then do a simple_search with the generated caption.
+    Run the OPENAI image model on a local file path with structured output,
+    then do an enhanced search using the structured data.
     Returns structured product data as a dictionary with:
-    - caption: The generated image description
+    - caption: Human-readable description (formatted from structured data)
+    - structured_data: The parsed JSON from AI
     - products: List of product dicts with full details from DB
     """
     if not SERVICE_READY or df_prod is None:
         return {
             "error": "Der Bildservice ist noch nicht konfiguriert (Produktdaten fehlen).",
             "caption": "",
+            "structured_data": None,
             "products": []
         }
 
     try:
-        caption = image_to_text(image_path).strip()
+        # Request structured JSON output
+        ai_data = image_to_text(image_path, structured=True)
+        
+        # Handle both dict (structured) and str (fallback) responses
+        if isinstance(ai_data, str):
+            # Fallback: treat as plain text
+            print(f"[WARNING] AI returned plain text instead of JSON: {ai_data}")
+            candidates = simple_search(ai_data, limit=limit)
+            return {
+                "caption": ai_data,
+                "structured_data": None,
+                "products": []
+            }
+        
+        # Format human-readable caption from structured data
+        caption_parts = []
+        if ai_data.get("produktname") and ai_data.get("produktname") != "Kein Produkt erkannt":
+            caption_parts.append(f"Produktname: {ai_data.get('produktname')}")
+        if ai_data.get("typ"):
+            caption_parts.append(f"Typ: {ai_data.get('typ')}")
+        if ai_data.get("material"):
+            caption_parts.append(f"Material: {ai_data.get('material')}")
+        if ai_data.get("farbe"):
+            caption_parts.append(f"Farbe: {ai_data.get('farbe')}")
+        if ai_data.get("groesse"):
+            caption_parts.append(f"Größe: {ai_data.get('groesse')}")
+        if ai_data.get("form"):
+            caption_parts.append(f"Form: {ai_data.get('form')}")
+        if ai_data.get("behaelter"):
+            caption_parts.append(f"Behälter: {ai_data.get('behaelter')}")
+        if ai_data.get("wichtige_merkmale"):
+            caption_parts.append(f"Wichtige Merkmale: {ai_data.get('wichtige_merkmale')}")
+        
+        caption = "\n".join(caption_parts) if caption_parts else "Kein Produkt erkannt"
+        
+        print(f"[Debug] Strukturierte KI-Daten: {ai_data}")
+        print(f"[Debug] Formatierte Beschreibung: {caption}")
+
+        # Use enhanced structured search
+        candidates = simple_search_structured(ai_data, limit=limit)
+        
     except Exception as e:
+        import traceback
+        print(f"[ERROR] Fehler bei der Bildauswertung: {traceback.format_exc()}")
         return {
             "error": f"Fehler bei der Bildauswertung: {e}",
             "caption": "",
+            "structured_data": None,
             "products": []
         }
-
-    if not caption:
-        return {
-            "error": "Ich konnte aus dem Bild keine sinnvolle Beschreibung erzeugen.",
-            "caption": "",
-            "products": []
-        }
-
-    print(f"[Debug] Bildbeschreibung: {caption}")
-
-    candidates = simple_search(caption, limit=limit)
 
     enriched_products = []
 
@@ -412,7 +649,7 @@ def answer_from_image_structured(image_path: str, limit: int = 5) -> dict:
                 print(f"[DEBUG] error fetching image URL for {art_nr}: {e}")
                 obi_image_url = None
 
-        # Get train_text (Beschreibung) from Supabase
+        # Get train_text (description) from Supabase
         train_text_raw = row.get("train_text", None)
         train_text = None
         if pd.notna(train_text_raw) and train_text_raw not in ("", None):
@@ -433,6 +670,7 @@ def answer_from_image_structured(image_path: str, limit: int = 5) -> dict:
 
     return {
         "caption": caption,
+        "structured_data": ai_data if not isinstance(ai_data, str) else None,
         "products": enriched_products,
         "error": None
     }

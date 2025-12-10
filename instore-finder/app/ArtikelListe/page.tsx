@@ -1,9 +1,67 @@
 "use client";
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Camera, X, RefreshCw, Sparkles, ScanLine, Image as ImageIcon } from 'lucide-react';
+import { Camera, X, RefreshCw, Sparkles, ScanLine, Image as ImageIcon, Mic, Square } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 // oben im File
 import Image from "next/image";
+
+// TypeScript-Typen für Web Speech API
+interface SpeechRecognition extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onspeechstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onspeechend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onsoundstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onsoundend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onaudiostart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onaudioend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onnomatch: ((this: SpeechRecognition, ev: Event) => void) | null;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+  isFinal: boolean;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: {
+      new (): SpeechRecognition;
+    };
+    webkitSpeechRecognition: {
+      new (): SpeechRecognition;
+    };
+  }
+}
 
 
 
@@ -21,6 +79,15 @@ export default function ArtikelForm() {
 
   const [showCamera, setShowCamera] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Speech-to-Text State - Verwende Backend mit MediaRecorder
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingField, setRecordingField] = useState<string | null>(null); // 'title' oder 'beschreibung'
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  
   interface ProductResult {
     Art_Nr: string;
     Art_Bezeichnung: string;
@@ -32,8 +99,20 @@ export default function ArtikelForm() {
     score: number;
   }
 
+  interface StructuredAIData {
+    produktname?: string;
+    typ?: string;
+    material?: string;
+    farbe?: string;
+    groesse?: string;
+    form?: string;
+    behaelter?: string;
+    wichtige_merkmale?: string;
+  }
+
   interface ImageSearchResponse {
     caption: string;
+    structured_data?: StructuredAIData | null;
     products: ProductResult[];
     error: string | null;
   }
@@ -53,6 +132,127 @@ export default function ArtikelForm() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+
+  // Speech-to-Text Funktionen - Verwende Backend mit MediaRecorder
+  const startRecording = useCallback(async (fieldName: 'title' | 'beschreibung') => {
+    console.log('[DEBUG] startRecording aufgerufen für:', fieldName);
+    
+    try {
+      // Mikrofonzugriff anfordern
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      
+      // MediaRecorder erstellen
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+          console.log('[DEBUG] Audio-Chunk erhalten:', event.data.size, 'bytes');
+        }
+      };
+      
+      mediaRecorder.onstop = async () => {
+        console.log('[DEBUG] Aufnahme gestoppt, starte Transkription...');
+        setIsTranscribing(true);
+        
+        // Audio-Blob erstellen
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        console.log('[DEBUG] Audio-Blob erstellt:', audioBlob.size, 'bytes');
+        
+        if (audioBlob.size < 1000) {
+          console.warn('[DEBUG] Audio zu kurz:', audioBlob.size, 'bytes');
+          alert('Aufnahme zu kurz. Bitte sprechen Sie länger.');
+          setIsTranscribing(false);
+          setIsRecording(false);
+          setRecordingField(null);
+          return;
+        }
+        
+        // Audio an Backend senden
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'recording.webm');
+        
+        try {
+          console.log('[DEBUG] Sende Audio an Backend...');
+          const response = await fetch('http://localhost:8000/audio_to_text', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          console.log('[DEBUG] Response Status:', response.status);
+          console.log('[DEBUG] Response OK:', response.ok);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[DEBUG] HTTP Fehler:', response.status, errorText);
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+          }
+          
+          const data = await response.json();
+          console.log('[DEBUG] Response Data:', data);
+          console.log('[DEBUG] Transkription erhalten:', data.text);
+          
+          // Text ins entsprechende Feld einfügen
+          if (data.text && data.text.trim()) {
+            if (fieldName === 'beschreibung') {
+              setFormData(prev => ({ ...prev, beschreibung: data.text.trim() }));
+              console.log('[DEBUG] Beschreibung aktualisiert zu:', data.text.trim());
+            } else if (fieldName === 'title') {
+              setFormData(prev => ({ ...prev, title: data.text.trim() }));
+              console.log('[DEBUG] Title aktualisiert zu:', data.text.trim());
+            }
+          } else {
+            console.warn('[DEBUG] Kein Text in Response:', data);
+            alert('Keine Sprache erkannt. Bitte versuchen Sie es erneut.');
+          }
+        } catch (error) {
+          console.error('[DEBUG] Fehler bei Transkription:', error);
+          if (error instanceof Error) {
+            console.error('[DEBUG] Fehler-Details:', error.message);
+            alert(`Fehler bei der Spracherkennung: ${error.message}`);
+          } else {
+            alert('Fehler bei der Spracherkennung. Bitte versuchen Sie es erneut.');
+          }
+        } finally {
+          setIsTranscribing(false);
+          setIsRecording(false);
+          setRecordingField(null);
+        }
+        
+        // Stream freigeben
+        if (audioStreamRef.current) {
+          audioStreamRef.current.getTracks().forEach(track => track.stop());
+          audioStreamRef.current = null;
+        }
+      };
+      
+      // Aufnahme starten
+      mediaRecorder.start(1000); // Sammle Daten alle Sekunde
+      setIsRecording(true);
+      setRecordingField(fieldName);
+      console.log('[DEBUG] Aufnahme gestartet');
+      
+    } catch (error) {
+      console.error('[DEBUG] Fehler beim Starten der Aufnahme:', error);
+      alert('Mikrofonzugriff wurde verweigert. Bitte erlauben Sie den Mikrofonzugriff.');
+      setIsRecording(false);
+      setRecordingField(null);
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    console.log('[DEBUG] stopRecording aufgerufen');
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+    }
+  }, [isRecording]);
+
+
 
   // Suche ausführen
   const handleSearch = () => {
@@ -401,14 +601,58 @@ export default function ArtikelForm() {
                 <label className="block text-xs sm:text-sm font-semibold text-zinc-700 mb-2 ml-1">
                   Beschreibung
                 </label>
-                <textarea
-                  name="beschreibung"
-                  rows={3}
-                  placeholder="Zusätzliche Infos...in Natürlicher Sprache"
-                  className="w-full p-3 sm:p-4 bg-zinc-50 border border-zinc-200 rounded-lg sm:rounded-xl text-sm sm:text-base text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent focus:bg-white transition-all resize-none"
-                  value={formData.beschreibung}
-                  onChange={handleChange}
-                />
+                <div className="relative">
+                  <textarea
+                    name="beschreibung"
+                    rows={3}
+                    placeholder="Zusätzliche Infos...in Natürlicher Sprache"
+                    className="w-full p-3 sm:p-4 pr-14 bg-zinc-50 border border-zinc-200 rounded-lg sm:rounded-xl text-sm sm:text-base text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent focus:bg-white transition-all resize-none"
+                    value={formData.beschreibung}
+                    onChange={handleChange}
+                    disabled={isRecording && recordingField === 'beschreibung'}
+                  />
+                  {/* SPEECH-TO-TEXT BUTTON - Comment/Uncomment to show/hide */}
+                  {/*
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isRecording && recordingField === 'beschreibung') {
+                        stopRecording();
+                      } else if (!isRecording) {
+                        startRecording('beschreibung');
+                      }
+                    }}
+                    disabled={isRecording && recordingField !== 'beschreibung'}
+                    className={`absolute right-2 bottom-2 p-2.5 rounded-lg transition-all shadow-md z-10 ${
+                      isRecording && recordingField === 'beschreibung'
+                        ? 'bg-red-500 text-white animate-pulse'
+                        : 'bg-orange-500 text-white hover:bg-orange-600 hover:scale-105'
+                    } ${isRecording && recordingField !== 'beschreibung' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    title={isRecording && recordingField === 'beschreibung' ? 'Aufnahme stoppen' : 'Spracheingabe starten'}
+                  >
+                    {isRecording && recordingField === 'beschreibung' ? (
+                      <Square size={20} />
+                    ) : (
+                      <Mic size={20} />
+                    )}
+                  </button>
+                  */}
+                </div>
+                {/* SPEECH-TO-TEXT STATUS MESSAGES - Comment/Uncomment to show/hide */}
+                {/*
+                {isRecording && recordingField === 'beschreibung' && (
+                  <p className="text-xs text-orange-600 mt-1 ml-1 flex items-center gap-1">
+                    <span className="animate-pulse">●</span>
+                    Sprechen Sie jetzt laut und deutlich...
+                  </p>
+                )}
+                {isTranscribing && recordingField === 'beschreibung' && !isRecording && (
+                  <p className="text-xs text-orange-600 mt-1 ml-1 flex items-center gap-1">
+                    <span className="animate-pulse">●</span>
+                    Verarbeite...
+                  </p>
+                )}
+                */}
               </div>
             </div>
 
@@ -426,11 +670,28 @@ export default function ArtikelForm() {
               <div className="flex items-start gap-3">
                 <Sparkles size={20} className="text-orange-500 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <h3 className="text-sm font-bold text-orange-700 mb-2 uppercase tracking-wide">
+                  <h3 className="text-sm font-bold text-orange-700 mb-3 uppercase tracking-wide">
                     KI-Analyse
                   </h3>
-                  <p className="text-sm sm:text-base text-zinc-700 leading-relaxed">
-                    {imageSearchResults.caption}
+                  <p className="text-sm sm:text-base text-zinc-700 leading-relaxed whitespace-pre-line">
+                    {(() => {
+                      const data = imageSearchResults.structured_data;
+                      if (data) {
+                        const parts: string[] = [];
+                        if (data.produktname && data.produktname !== "Kein Produkt erkannt") parts.push(`Produkt: ${data.produktname}`);
+                        if (data.typ) parts.push(`Typ: ${data.typ}`);
+                        if (data.material) parts.push(`Material: ${data.material}`);
+                        if (data.farbe) parts.push(`Farbe: ${data.farbe}`);
+                        if (data.groesse) parts.push(`Größe: ${data.groesse}`);
+                        if (data.form) parts.push(`Form: ${data.form}`);
+                        if (data.behaelter) parts.push(`Behälter: ${data.behaelter}`);
+                        if (data.wichtige_merkmale) parts.push(`Merkmale: ${data.wichtige_merkmale}`);
+                        if (parts.length > 0) {
+                          return `Auf dem Bild erkannt: ${parts.join(", ")}.`;
+                        }
+                      }
+                      return imageSearchResults.caption;
+                    })()}
                   </p>
                 </div>
               </div>
