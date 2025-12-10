@@ -3,11 +3,13 @@ import base64
 import mimetypes
 import tempfile
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from product_service import answer_query, answer_from_image, answer_from_image_structured, get_product_by_art_nr
+from speech_to_text import transcribe_audio
+from text_to_speech import text_to_speech_wav
 
 load_dotenv()
 
@@ -52,6 +54,8 @@ def _build_messages(data_uri: str) -> list[dict]:
             "content": (
                 "Du bist ein Assistent für einen Baumarkt-Produktfinder. "
                 "Analysiere das Bild und beschreibe NUR die Produkte, die du siehst. "
+                "Fokussiere dich auf das, was im Vordergrund ist - das ist normalerweise das Hauptprodukt. "
+                "Ignoriere Hintergrund-Elemente wie Personen, Wände oder andere nicht relevante Objekte. "
                 "Fokussiere dich auf: Produktname, Typ, Material, Farbe, Größe, Form und wichtige Details. "
                 "Wenn keine Produkte im Bild sind, schreibe 'Kein Produkt erkannt'. "
                 "Gib eine kurze, präzise Produktbeschreibung auf Deutsch zurück."
@@ -60,7 +64,7 @@ def _build_messages(data_uri: str) -> list[dict]:
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "Beschreibe die Produkte in diesem Bild detailliert. Nenne Produktname, Typ, Material, Farbe und wichtige Merkmale."},
+                {"type": "text", "text": "Beschreibe nur das Produkt im Vordergrund. Beschreibe die Produkte in diesem Bild detailliert. Nenne Produktname, Typ, Material, Farbe und wichtige Merkmale."},
                 {"type": "image_url", "image_url": {"url": data_uri, "detail": "high"}},
             ],
         },
@@ -118,6 +122,91 @@ async def image_to_prod_id(
             os.remove(tmp_path)
         except OSError:
             pass
+
+
+@app.post("/audio_to_text")
+async def audio_to_text(
+    file: UploadFile = File(..., description="Audio file (MP3, WAV, etc.) for transcription"),
+):
+    """
+    Receive an audio file from the frontend, 
+    write it to a temporary file, and transcribe it to German text.
+    
+    Returns JSON with transcribed text.
+    """
+    # 1) Read the file content from the incoming request
+    content = await file.read()
+
+    # 2) Create a temporary file inside the container
+    # Determine file extension from content type or filename
+    suffix = ".mp3"  # default
+    if file.filename:
+        _, ext = os.path.splitext(file.filename)
+        if ext:
+            suffix = ext
+    elif file.content_type:
+        if "wav" in file.content_type:
+            suffix = ".wav"
+        elif "mpeg" in file.content_type or "mp3" in file.content_type:
+            suffix = ".mp3"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        # 3) Transcribe the audio file
+        print(f"[DEBUG] Transcribing audio file: {tmp_path}, size: {len(content)} bytes")
+        transcribed_text = transcribe_audio(tmp_path)
+        print(f"[DEBUG] Transcribed text: {transcribed_text}")
+        return JSONResponse({"text": transcribed_text})
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[ERROR] Audio transcription failed: {error_details}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler bei der Audio-Transkription: {str(e)}"
+        )
+    finally:
+        # 4) Cleanup: remove the temp file
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+@app.post("/text_to_speech")
+async def text_to_speech(
+    text: str = Form(..., description="Text to convert to speech"),
+    language: str = Form("de-DE", description="Language code (default: de-DE)"),
+    voice: str = Form("de-DE-KatjaNeural", description="Voice name (default: de-DE-KatjaNeural)"),
+):
+    """
+    Convert text to WAV audio using Azure Text-to-Speech.
+    Returns WAV audio file.
+    """
+    try:
+        print(f"[DEBUG] Converting text to speech: {text[:50]}...")
+        wav_data = text_to_speech_wav(text, language=language, voice=voice)
+        print(f"[DEBUG] Generated WAV audio: {len(wav_data)} bytes")
+        
+        return Response(
+            content=wav_data,
+            media_type="audio/wav",
+            headers={
+                "Content-Disposition": "attachment; filename=speech.wav",
+                "Content-Length": str(len(wav_data)),
+            }
+        )
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[ERROR] Text-to-Speech failed: {error_details}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler bei der Text-zu-Sprache-Konvertierung: {str(e)}"
+        )
 
 
 @app.get("/obi_image/{art_nr}")
